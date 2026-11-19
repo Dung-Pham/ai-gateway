@@ -18,13 +18,15 @@ Nguyên tắc: **bí mật và thao tác đụng vào server làm bằng tay ở
 | Tạm dừng / bật lại một tài khoản AI | Tài khoản AI (danh sách và chi tiết) | **Có** |
 | Dừng khẩn cấp toàn bộ ứng dụng | Hệ thống → Dừng khẩn cấp | **Có** |
 | Xem kiểm toán mọi thao tác | Hệ thống → Kiểm toán | **Có** |
-| **Sửa** hạn mức, model được phép, pool của một ứng dụng đã tạo | Ứng dụng → (một ứng dụng) | **Chưa**: trang chi tiết chỉ xem |
-| **Đăng ký một tài khoản AI mới** (nhãn, hãng, gói, số lượt song song tối đa) | Tài khoản AI → Thêm tài khoản | **Chưa**: nút bị tắt có chủ đích; cần làm form chỉ nhập thông tin mô tả, không nhập mật khẩu hay token |
-| **Sửa** số lượt song song, ghi chú, đổi tên nhãn của tài khoản AI | Tài khoản AI → (một tài khoản) | **Chưa** |
-| Hệ số quy đổi theo model (`model_weights`) | Hệ thống → Hệ số model | **Chưa** |
-| Ngưỡng cảnh báo (80%, 100%, tần suất kiểm tra phiên) | Hệ thống → Cài đặt | **Chưa** |
-| Kênh nhận cảnh báo (email, Telegram, Slack…) | Hệ thống → Cài đặt | **Chưa**, và **chưa quyết dùng kênh nào** |
-| Người dùng quản trị, vai trò, 2FA | Hệ thống → Người dùng | **Chưa** (hiện ai có tài khoản đều vào được) |
+| Sửa hạn mức, model được phép, pool của một ứng dụng đã tạo | Ứng dụng → (một ứng dụng) → Sửa | **Có** (đã xem trên màn hình; chưa thử lưu thay đổi bằng tay) |
+| Đăng ký một tài khoản AI mới (nhãn, hãng, gói, số lượt song song tối đa) | Tài khoản AI → Thêm tài khoản | **Có**: form chỉ nhập mô tả, không nhận mật khẩu hay token; tài khoản mới ở trạng thái "Chờ đăng nhập"; địa chỉ runner chỉ nhận tên nội bộ `runner-<nhãn>` (có test chống SSRF) |
+| Sửa số lượt song song, gói, ghi chú của tài khoản AI | Tài khoản AI → (một tài khoản) → Sửa | **Có** (nhãn và hãng không đổi được sau khi tạo) |
+| Hệ số quy đổi theo model (`model_weights`) | Hệ thống → Hệ số model | **Có** |
+| Ngưỡng cảnh báo (80%, 100%, tần suất kiểm tra phiên), giữ dữ liệu | Hệ thống → Cài đặt | **Có** (chỉ lưu cấu hình; chưa có gì dùng các giá trị này vì chưa có gateway) |
+| Kênh nhận cảnh báo (email, webhook) | Hệ thống → Cài đặt | **Có chỗ nhập** (email, webhook https; webhook mã hóa khi lưu và không hiện lại). **Chưa có thành phần nào gửi cảnh báo thật** và bạn chưa quyết dùng kênh nào |
+| Người dùng quản trị, vai trò | Hệ thống → Người dùng | **Có** (4 vai trò, có test ma trận quyền) |
+| 2FA (TOTP) | Menu người dùng → Hồ sơ của tôi | **Có giao diện** (gói `filament-breezy` 2.6.6). **Chưa thử** luồng bật và đăng nhập với mã. Biến `REQUIRE_2FA=true` để bắt buộc |
+| Giới hạn truy cập giao diện theo dải mạng | Biến `ADMIN_ALLOWED_CIDRS` (không nằm trên web, có chủ đích) | **Có** (có test; chưa thử sau reverse proxy thật). Ở production mà để trống thì **khóa hết** |
 | Danh mục khả năng mới (ví dụ âm thanh) | không có trên giao diện | Có chủ đích: là việc của lập trình viên |
 
 ### A2. Việc làm ở server, không làm trên web
@@ -97,8 +99,8 @@ Không thứ nào ở trên được vào kho mã hay giao diện web.
 1. Image runner (CLI ghim phiên bản, user không đặc quyền, hệ tệp chỉ đọc, giới hạn tài nguyên).
 2. Gateway (FastAPI), proxy chuyển tiếp có danh sách tên miền, và file Docker Compose.
 3. Script "thêm tài khoản" của người vận hành.
-4. Form "Thêm tài khoản" (chỉ nhập mô tả) và các màn hình **Chưa** trong bảng A1.
-5. Phân vai, 2FA, giới hạn truy cập giao diện theo mạng.
+4. ~~Form "Thêm tài khoản" và các màn hình còn thiếu~~ **Đã làm** (xem bảng A1).
+5. ~~Phân vai, 2FA, giới hạn theo mạng~~ **Đã làm ở mức khung**; còn thử luồng 2FA thật và thử sau reverse proxy.
 
 Cho tới khi có các mục trên, "cấu hình trên server" chưa làm được; bạn chỉ có thể chuẩn bị các mục B1–B4.
 

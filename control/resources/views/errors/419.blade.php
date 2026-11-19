@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('title', 'Phiên làm việc đã hết hạn')
+@section('code', '419')
+@section('heading', 'Phiên làm việc đã hết hạn')
+@section('message', 'Hãy tải lại trang rồi thử lại.')

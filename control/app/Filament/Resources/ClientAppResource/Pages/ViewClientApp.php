@@ -21,7 +21,8 @@ class ViewClientApp extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('suspend')->label('Tạm ngưng ứng dụng')->icon('heroicon-m-pause')->color('danger')->outlined()
+            Actions\EditAction::make()->label('Sửa')->icon('heroicon-m-pencil-square'),
+            Actions\Action::make('suspend')->label('Tạm ngưng ứng dụng')->icon('heroicon-m-pause')->color('danger')->outlined()->authorize(fn () => \App\Filament\Support\Perm::can('apps.manage'))
                 ->visible(fn () => $this->record->status === AppStatus::Active)
                 ->requiresConfirmation()->modalHeading("Tạm ngưng {$this->record->name}?")
                 ->modalDescription('Mọi yêu cầu mới của ứng dụng sẽ bị từ chối ngay. Khóa API không bị thu hồi. Bật lại được bất cứ lúc nào.')
@@ -31,7 +32,7 @@ class ViewClientApp extends ViewRecord
                     Notification::make()->title('Đã tạm ngưng ứng dụng')->success()->send();
                     $this->redirect(ClientAppResource::getUrl('view', ['record' => $this->record]));
                 }),
-            Actions\Action::make('activate')->label('Bật lại ứng dụng')->icon('heroicon-m-play')
+            Actions\Action::make('activate')->label('Bật lại ứng dụng')->icon('heroicon-m-play')->authorize(fn () => \App\Filament\Support\Perm::can('apps.manage'))
                 ->visible(fn () => $this->record->status === AppStatus::Suspended)
                 ->requiresConfirmation()->modalHeading("Bật lại {$this->record->name}?")
                 ->action(function () {

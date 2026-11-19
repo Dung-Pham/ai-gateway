@@ -7,12 +7,16 @@ use App\Filament\RelationManagers\UsageEventsRelationManager;
 use App\Filament\Resources\AccountResource\Pages;
 use App\Filament\Support\Audit;
 use App\Models\Account;
+use Filament\Forms;
+use Filament\Forms\Form;
 use Filament\Infolists\Components\Grid;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ViewEntry;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
+use App\Filament\Support\GatedByRole;
+use App\Filament\Support\Perm;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -21,6 +25,8 @@ use Filament\Tables\Table;
 
 class AccountResource extends Resource
 {
+    use GatedByRole;
+
     protected static ?string $model = Account::class;
 
     protected static ?string $slug = 'tai-khoan';
@@ -37,10 +43,46 @@ class AccountResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'label';
 
-    public static function canCreate(): bool
+    protected static function viewAbility(): string
     {
-        // Thêm tài khoản là việc của người vận hành (script tạo runner + đăng nhập qua SSH), không làm trên web.
-        return false;
+        return 'accounts.view';
+    }
+
+    protected static function manageAbility(): ?string
+    {
+        return 'accounts.manage';
+    }
+
+    public static function form(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Section::make('Tài khoản AI')
+                ->description('Chỉ nhập thông tin mô tả. Giao diện này KHÔNG nhận mật khẩu, mã 2FA hay token: đăng nhập tài khoản do người vận hành làm trên server.')
+                ->columns(['default' => 1, 'md' => 2])->schema([
+                    Forms\Components\Select::make('provider_id')->label('Hãng')->relationship('provider', 'name')->required()->native(false)
+                        ->disabledOn('edit')->dehydrated(),
+                    Forms\Components\TextInput::make('label')->label('Nhãn')->required()->maxLength(64)
+                        ->regex('/^[a-z0-9]+(-[a-z0-9]+)*$/')->unique(ignoreRecord: true)->disabledOn('edit')->dehydrated()->live(onBlur: true)
+                        ->afterStateUpdated(fn ($state, $set, string $operation) => $operation === 'create' && filled($state) ? $set('runner_url', "http://runner-{$state}:8800") : null)
+                        ->helperText('Chữ thường, số, gạch ngang (ví dụ claude-runner-01). Xuất hiện trong nhật ký nên không đổi được sau khi tạo.'),
+                    Forms\Components\TextInput::make('plan')->label('Gói')->maxLength(64)->placeholder('Ví dụ: Gói Max'),
+                    Forms\Components\TextInput::make('max_concurrency')->label('Số lượt chạy song song tối đa')->numeric()->minValue(1)->maxValue(16)->default(2)->required()
+                        ->helperText('Mỗi lượt là một tiến trình CLI tốn RAM. Giá trị an toàn chốt sau khi đo (thăm dò P8).'),
+                    Forms\Components\TextInput::make('runner_url')->label('Địa chỉ runner (nội bộ)')->required()->maxLength(255)->columnSpanFull()
+                        ->rules([fn () => function (string $attribute, $value, \Closure $fail) {
+                            // Chống SSRF: chỉ chấp nhận tên máy dạng runner-<nhãn> trong mạng Docker nội bộ, không IP, không đường dẫn.
+                            $u = parse_url((string) $value);
+                            $ok = is_array($u) && ($u['scheme'] ?? '') === 'http' && preg_match('/^runner-[a-z0-9]+(-[a-z0-9]+)*$/', $u['host'] ?? '')
+                                && array_intersect_key($u, array_flip(['user', 'pass', 'query', 'fragment'])) === [] && in_array($u['path'] ?? '', ['', '/'], true)
+                                && (! isset($u['port']) || ($u['port'] >= 1024 && $u['port'] <= 65535));
+                            if (! $ok) {
+                                $fail('Chỉ nhận dạng http://runner-<nhãn>:<cổng> (tên máy nội bộ, không IP, không đường dẫn).');
+                            }
+                        }])
+                        ->helperText('Tự điền theo nhãn. Chỉ nhận tên máy nội bộ dạng runner-<nhãn>, để gateway không bị trỏ tới địa chỉ tùy ý.'),
+                    Forms\Components\Textarea::make('notes')->label('Ghi chú')->rows(2)->maxLength(500)->columnSpanFull(),
+                ]),
+        ]);
     }
 
     public static function table(Table $table): Table
@@ -61,6 +103,7 @@ class AccountResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()->label('Xem'),
+                Tables\Actions\EditAction::make()->label('Sửa'),
                 self::pauseAction(),
                 self::resumeAction(),
             ])
@@ -74,7 +117,7 @@ class AccountResource extends Resource
     public static function pauseAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('pause')->label('Tạm dừng')->icon('heroicon-m-pause')->color('gray')
-            ->visible(fn (Account $r) => in_array($r->status, [AccountStatus::Active, AccountStatus::Draining]))
+            ->authorize(fn () => Perm::can('accounts.manage'))->visible(fn (Account $r) => in_array($r->status, [AccountStatus::Active, AccountStatus::Draining]))
             ->requiresConfirmation()->modalHeading(fn (Account $r) => "Tạm dừng {$r->label}?")
             ->modalDescription('Tài khoản sẽ không nhận yêu cầu mới. Yêu cầu đang chạy vẫn hoàn tất. Có thể bật lại bất cứ lúc nào.')
             ->action(function (Account $r) {
@@ -87,7 +130,7 @@ class AccountResource extends Resource
     public static function resumeAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('resume')->label('Bật lại')->icon('heroicon-m-play')->color('primary')
-            ->visible(fn (Account $r) => $r->status === AccountStatus::Paused)
+            ->authorize(fn () => Perm::can('accounts.manage'))->visible(fn (Account $r) => $r->status === AccountStatus::Paused)
             ->requiresConfirmation()->modalHeading(fn (Account $r) => "Bật lại {$r->label}?")
             ->action(function (Account $r) {
                 $r->update(['status' => AccountStatus::Active]);
@@ -132,7 +175,9 @@ class AccountResource extends Resource
     {
         return [
             'index' => Pages\ListAccounts::route('/'),
+            'create' => Pages\CreateAccount::route('/them'),
             'view' => Pages\ViewAccount::route('/{record}'),
+            'edit' => Pages\EditAccount::route('/{record}/sua'),
         ];
     }
 }

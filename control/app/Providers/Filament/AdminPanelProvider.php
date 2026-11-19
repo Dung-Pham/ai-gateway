@@ -3,7 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\Dashboard;
-use App\Livewire\StatusStrip;
+use App\Http\Middleware\RestrictAdminNetwork;
 use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -14,6 +14,7 @@ use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Enums\MaxWidth;
 use Filament\View\PanelsRenderHook;
+use Jeffgreco13\FilamentBreezy\BreezyCore;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -76,17 +77,24 @@ class AdminPanelProvider extends PanelProvider
             ->breadcrumbs(false)
             ->maxContentWidth(MaxWidth::ScreenTwoExtraLarge)
             ->viteTheme('resources/css/filament/admin/theme.css')
+            // 2FA (TOTP) + trang hồ sơ cá nhân. Bắt buộc với mọi người dùng khi REQUIRE_2FA=true (nên bật ở production).
+            ->plugin(BreezyCore::make()
+                ->myProfile(shouldRegisterUserMenu: true, shouldRegisterNavigation: false, hasAvatars: false)
+                // Cùng chính sách mật khẩu với màn Người dùng: tối thiểu 12 ký tự.
+                ->passwordUpdateRules(rules: [\Illuminate\Validation\Rules\Password::min(12)], requiresCurrentPassword: true)
+                ->enableTwoFactorAuthentication(force: (bool) config('gateway.require_2fa')))
             ->globalSearchKeyBindings(['ctrl+k', 'command+k'])
             ->unsavedChangesAlerts()
             ->navigationGroups([
                 NavigationGroup::make('Hệ thống'),
             ])
-            ->renderHook(PanelsRenderHook::TOPBAR_AFTER, fn (): string => Blade::render('@livewire(\App\Livewire\StatusStrip::class)'))
+            ->renderHook(PanelsRenderHook::TOPBAR_AFTER, fn (): string => auth()->user()?->isAppOwner() ? '' : Blade::render('@livewire(\App\Livewire\StatusStrip::class)'))
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([Dashboard::class])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->middleware([
+                RestrictAdminNetwork::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

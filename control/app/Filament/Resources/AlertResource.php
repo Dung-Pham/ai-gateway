@@ -7,6 +7,8 @@ use App\Filament\Resources\AlertResource\Pages;
 use App\Filament\Support\Audit;
 use App\Models\Alert;
 use Filament\Notifications\Notification;
+use App\Filament\Support\GatedByRole;
+use App\Filament\Support\Perm;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -15,6 +17,18 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AlertResource extends Resource
 {
+    use GatedByRole;
+
+    protected static function viewAbility(): string
+    {
+        return 'alerts.view';
+    }
+
+    protected static function manageAbility(): ?string
+    {
+        return 'alerts.manage';
+    }
+
     protected static ?string $model = Alert::class;
 
     protected static ?string $slug = 'canh-bao';
@@ -29,13 +43,11 @@ class AlertResource extends Resource
 
     protected static ?int $navigationSort = 6;
 
-    public static function canCreate(): bool
-    {
-        return false;
-    }
-
     public static function getNavigationBadge(): ?string
     {
+        if (! Perm::can('alerts.view')) {
+            return null;
+        }
         $n = Alert::open()->whereNull('acknowledged_at')->count();
 
         return $n ? (string) $n : null;
@@ -63,14 +75,14 @@ class AlertResource extends Resource
                 Tables\Filters\SelectFilter::make('severity')->label('Mức độ')->options(collect(Severity::cases())->mapWithKeys(fn ($c) => [$c->value => $c->getLabel()])->all()),
             ])
             ->actions([
-                Tables\Actions\Action::make('ack')->label('Đã biết')->icon('heroicon-m-eye')->color('gray')
+                Tables\Actions\Action::make('ack')->label('Đã biết')->icon('heroicon-m-eye')->color('gray')->authorize(fn () => Perm::can('alerts.manage'))
                     ->visible(fn (Alert $r) => ! $r->acknowledged_at && ! $r->resolved_at)
                     ->action(function (Alert $r) {
                         $r->update(['acknowledged_at' => now()]);
                         Audit::log('alert.ack', $r->title);
                         Notification::make()->title('Đã xác nhận cảnh báo')->success()->send();
                     }),
-                Tables\Actions\Action::make('resolve')->label('Đã giải quyết')->icon('heroicon-m-check')->color('success')
+                Tables\Actions\Action::make('resolve')->label('Đã giải quyết')->icon('heroicon-m-check')->color('success')->authorize(fn () => Perm::can('alerts.manage'))
                     ->visible(fn (Alert $r) => ! $r->resolved_at)
                     ->requiresConfirmation()->modalHeading('Đánh dấu đã giải quyết?')->modalDescription('Cảnh báo sẽ chuyển sang lịch sử. Nếu sự cố còn, hệ thống sẽ mở cảnh báo mới.')
                     ->action(function (Alert $r) {

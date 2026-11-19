@@ -8,6 +8,7 @@ use App\Models\AppKey;
 use App\Models\AuditLog;
 use App\Models\Capability;
 use App\Models\ClientApp;
+use App\Models\ModelWeight;
 use App\Models\Pool;
 use App\Models\Provider;
 use Illuminate\Database\Seeder;
@@ -90,6 +91,10 @@ class DemoDataSeeder extends Seeder
             $apps[$slug] = $app;
         }
         AppKey::query()->where('app_id', $apps['seo-studio']->id)->first()?->replicate()->fill(['name' => 'Khóa cũ (sắp thu hồi)', 'key_prefix' => 'gw_' . Str::lower(Str::random(8)), 'key_hash' => hash('sha256', Str::random(40)), 'expires_at' => $now->copy()->addDays(6)])->save();
+
+        foreach ([['opus', 5, 'Tốn hạn mức nhất'], ['sonnet', 1, 'Mức chuẩn'], ['haiku', 0.25, 'Nhẹ'], ['gemini-pro', 1, null], ['gemini-flash', 0.2, 'Nhẹ'], ['grok-default', 1, null]] as [$m, $w, $n]) {
+            ModelWeight::create(['model' => $m, 'weight' => $w, 'note' => $n]);
+        }
 
         $this->usage($apps, $acc, $now);
         $this->alerts($apps, $acc, $now);

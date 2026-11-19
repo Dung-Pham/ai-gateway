@@ -8,11 +8,18 @@ use App\Filament\Resources\ClientAppResource\Pages;
 use App\Filament\Resources\ClientAppResource\RelationManagers\KeysRelationManager;
 use App\Filament\Support\Audit;
 use App\Models\ClientApp;
+use App\Models\Capability;
+use App\Models\ModelWeight;
+use App\Models\Pool;
+use Filament\Forms;
+use Filament\Forms\Form;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
+use App\Filament\Support\GatedByRole;
+use App\Filament\Support\Perm;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -21,6 +28,8 @@ use Filament\Tables\Table;
 
 class ClientAppResource extends Resource
 {
+    use GatedByRole;
+
     protected static ?string $model = ClientApp::class;
 
     protected static ?string $slug = 'ung-dung';
@@ -36,6 +45,66 @@ class ClientAppResource extends Resource
     protected static ?int $navigationSort = 3;
 
     protected static ?string $recordTitleAttribute = 'name';
+
+    protected static function viewAbility(): string
+    {
+        return 'apps.view';
+    }
+
+    protected static function manageAbility(): ?string
+    {
+        return 'apps.manage';
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        // Chủ ứng dụng chỉ thấy ứng dụng được gán; mở đường dẫn của ứng dụng khác sẽ ra 404.
+        return Perm::scopeToOwnedApps(parent::getEloquentQuery(), 'apps.id');
+    }
+
+    public static function form(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Section::make('Thông tin')->columns(['default' => 1, 'md' => 2])->schema([
+                Forms\Components\TextInput::make('name')->label('Tên ứng dụng')->required()->maxLength(96),
+                Forms\Components\TextInput::make('slug')->label('Mã định danh')->disabled()->dehydrated(false)->helperText('Không đổi được vì đang dùng trong nhật ký và API.'),
+                Forms\Components\TextInput::make('owner')->label('Bộ phận phụ trách')->maxLength(96),
+                Forms\Components\Textarea::make('description')->label('Mô tả')->rows(2)->maxLength(500)->columnSpanFull(),
+            ]),
+            Forms\Components\Section::make('Khả năng và định tuyến')
+                ->description('Không có dòng nào nghĩa là ứng dụng không được dùng khả năng đó. Mỗi khả năng chỉ một dòng.')
+                ->schema([
+                    Forms\Components\Repeater::make('policies')->relationship()->hiddenLabel()->addActionLabel('Cấp thêm một khả năng')->columns(['default' => 1, 'md' => 2])
+                        ->itemLabel(fn (array $state) => Capability::find($state['capability_id'] ?? null)?->name)->collapsible()
+                        ->schema([
+                            Forms\Components\Select::make('capability_id')->label('Khả năng')->required()->native(false)->distinct()
+                                ->options(fn () => Capability::where('enabled', true)->pluck('name', 'id')->all())
+                                ->helperText('Khả năng rủi ro cao (như Tìm web) chỉ cấp khi thật sự cần.'),
+                            Forms\Components\Toggle::make('enabled')->label('Đang bật')->default(true)->inline(false),
+                            Forms\Components\TagsInput::make('allowed_models')->label('Model được phép')
+                                ->suggestions(fn () => ModelWeight::orderBy('model')->pluck('model')->all())
+                                ->placeholder('Để trống = mọi model của pool')->columnSpanFull(),
+                            Forms\Components\Select::make('pool_id')->label('Pool chính')->native(false)->required()->options(fn () => Pool::pluck('name', 'id')->all()),
+                            Forms\Components\Select::make('fallback_pool_id')->label('Pool dự phòng')->native(false)->options(fn () => Pool::pluck('name', 'id')->all())->placeholder('Không có'),
+                        ]),
+                ]),
+            Forms\Components\Section::make('Hạn mức')
+                ->description('Hạn mức nội bộ do bạn đặt. "Cứng" chặn khi vượt, "mềm" chỉ cảnh báo. Không phải hạn mức của hãng.')
+                ->schema([
+                    Forms\Components\Repeater::make('limits')->relationship()->hiddenLabel()->addActionLabel('Thêm hạn mức riêng cho một khả năng')->columns(['default' => 1, 'md' => 5])
+                        ->schema([
+                            Forms\Components\Select::make('capability_code')->label('Áp dụng cho')->native(false)->placeholder('Tất cả khả năng')
+                                ->options(fn () => Capability::pluck('name', 'code')->all()),
+                            Forms\Components\TextInput::make('rpm')->label('Yêu cầu / phút')->numeric()->minValue(1),
+                            Forms\Components\TextInput::make('max_concurrency')->label('Song song tối đa')->numeric()->minValue(1),
+                            Forms\Components\TextInput::make('units_per_day')->label('Đơn vị / ngày')->numeric()->minValue(1),
+                            Forms\Components\TextInput::make('units_per_month')->label('Đơn vị / tháng')->numeric()->minValue(1)
+                                ->gte('units_per_day'),
+                            Forms\Components\Select::make('mode')->label('Khi vượt')->native(false)->options(['hard' => 'Chặn (cứng)', 'soft' => 'Chỉ cảnh báo (mềm)'])->default('hard')->required(),
+                        ]),
+                ]),
+        ]);
+    }
 
     public static function table(Table $table): Table
     {
@@ -53,7 +122,8 @@ class ClientAppResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()->label('Xem'),
-                Tables\Actions\Action::make('suspend')->label('Tạm ngưng')->icon('heroicon-m-pause')->color('gray')
+                Tables\Actions\EditAction::make()->label('Sửa'),
+                Tables\Actions\Action::make('suspend')->label('Tạm ngưng')->icon('heroicon-m-pause')->color('gray')->authorize(fn () => Perm::can('apps.manage'))
                     ->visible(fn (ClientApp $r) => $r->status === AppStatus::Active)
                     ->requiresConfirmation()->modalHeading(fn (ClientApp $r) => "Tạm ngưng {$r->name}?")
                     ->modalDescription('Mọi yêu cầu mới của ứng dụng sẽ bị từ chối ngay. Bật lại được bất cứ lúc nào.')
@@ -62,7 +132,7 @@ class ClientAppResource extends Resource
                         Audit::log('app.suspend', $r->name);
                         Notification::make()->title("Đã tạm ngưng {$r->name}")->success()->send();
                     }),
-                Tables\Actions\Action::make('activate')->label('Bật lại')->icon('heroicon-m-play')
+                Tables\Actions\Action::make('activate')->label('Bật lại')->icon('heroicon-m-play')->authorize(fn () => Perm::can('apps.manage'))
                     ->visible(fn (ClientApp $r) => $r->status === AppStatus::Suspended)
                     ->requiresConfirmation()->modalHeading(fn (ClientApp $r) => "Bật lại {$r->name}?")
                     ->action(function (ClientApp $r) {
@@ -117,6 +187,7 @@ class ClientAppResource extends Resource
             'index' => Pages\ListClientApps::route('/'),
             'create' => Pages\CreateClientApp::route('/them'),
             'view' => Pages\ViewClientApp::route('/{record}'),
+            'edit' => Pages\EditClientApp::route('/{record}/sua'),
         ];
     }
 }

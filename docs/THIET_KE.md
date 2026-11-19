@@ -166,6 +166,7 @@ Nguyên tắc: **AI chỉ là bộ sinh nội dung. Nó không có tay chân.** 
 6. **Không ghi nội dung**: log và `usage_events` chỉ chứa số liệu. Bật ghi nội dung (để gỡ lỗi) phải là hành động riêng, có thời hạn tự tắt, có kiểm toán.
 7. **Bí mật**: thư mục phiên đăng nhập quyền `0600` trong volume riêng, sao lưu có mã hóa; đăng nhập OAuth chỉ làm tay qua SSH, giao diện web không nhận mật khẩu/token.
 8. **Dừng khẩn cấp**: nút tắt cho từng app, từng khóa, từng tài khoản, và toàn bộ gateway.
+9. **Cách ly ở tầng máy**: chạy toàn bộ Cổng AI trên một máy (VM/VPS) tách biệt với server chính, tường lửa hai chiều, không chia sẻ bí mật; container chỉ là lớp thứ hai. Xem [CACH_LY_MAY_CHU.md](CACH_LY_MAY_CHU.md).
 
 ### 7.3 Xử lý ảnh (đầu vào và đầu ra)
 - Chỉ nhận dữ liệu ảnh do app gửi; không tải từ URL.

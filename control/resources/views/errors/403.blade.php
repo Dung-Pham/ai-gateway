@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('title', 'Bạn không có quyền truy cập')
+@section('code', '403')
+@section('heading', 'Bạn không có quyền truy cập')
+@section('message', ($exception->getMessage() ?: 'Vai trò hiện tại của bạn không được xem trang này. Nếu cần, hãy nhờ quản trị viên cấp quyền.'))

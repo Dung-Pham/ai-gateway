@@ -11,7 +11,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        // Chỉ tin header chuyển tiếp từ các proxy được khai báo rõ (TRUSTED_PROXIES, cách nhau bằng dấu phẩy).
+        if ($proxies = env('TRUSTED_PROXIES')) {
+            $middleware->trustProxies(at: array_map('trim', explode(',', $proxies)));
+        }
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

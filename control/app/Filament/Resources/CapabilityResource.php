@@ -6,6 +6,8 @@ use App\Filament\Resources\CapabilityResource\Pages;
 use App\Filament\Support\Audit;
 use App\Models\Capability;
 use Filament\Notifications\Notification;
+use App\Filament\Support\GatedByRole;
+use App\Filament\Support\Perm;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\IconColumn;
@@ -14,6 +16,18 @@ use Filament\Tables\Table;
 
 class CapabilityResource extends Resource
 {
+    use GatedByRole;
+
+    protected static function viewAbility(): string
+    {
+        return 'capabilities.view';
+    }
+
+    protected static function manageAbility(): ?string
+    {
+        return 'capabilities.manage';
+    }
+
     protected static ?string $model = Capability::class;
 
     protected static ?string $slug = 'he-thong/kha-nang';
@@ -49,7 +63,7 @@ class CapabilityResource extends Resource
             ->actions([
                 Tables\Actions\Action::make('toggle')
                     ->label(fn (Capability $r) => $r->enabled ? 'Tắt' : 'Bật')->icon(fn (Capability $r) => $r->enabled ? 'heroicon-m-power' : 'heroicon-m-play')
-                    ->color(fn (Capability $r) => $r->enabled ? 'gray' : 'primary')
+                    ->color(fn (Capability $r) => $r->enabled ? 'gray' : 'primary')->authorize(fn () => Perm::can('capabilities.manage'))
                     ->requiresConfirmation()
                     ->modalHeading(fn (Capability $r) => ($r->enabled ? 'Tắt' : 'Bật') . " khả năng \"{$r->name}\"?")
                     ->modalDescription(fn (Capability $r) => $r->enabled

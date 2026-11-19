@@ -11,6 +11,8 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use App\Filament\Support\GatedByRole;
+use App\Filament\Support\Perm;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -18,6 +20,18 @@ use Filament\Tables\Table;
 
 class PoolResource extends Resource
 {
+    use GatedByRole;
+
+    protected static function viewAbility(): string
+    {
+        return 'pools.view';
+    }
+
+    protected static function manageAbility(): ?string
+    {
+        return 'pools.manage';
+    }
+
     protected static ?string $model = Pool::class;
 
     protected static ?string $slug = 'dinh-tuyen';

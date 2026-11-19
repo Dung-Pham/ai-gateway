@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('title', 'Quá nhiều yêu cầu')
+@section('code', '429')
+@section('heading', 'Quá nhiều yêu cầu')
+@section('message', 'Hãy chờ một lát rồi thử lại.')

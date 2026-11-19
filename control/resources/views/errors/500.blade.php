@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('title', 'Có lỗi ở máy chủ')
+@section('code', '500')
+@section('heading', 'Có lỗi ở máy chủ')
+@section('message', 'Lỗi đã được ghi lại. Hãy thử lại sau; nếu còn, báo cho người quản trị.')

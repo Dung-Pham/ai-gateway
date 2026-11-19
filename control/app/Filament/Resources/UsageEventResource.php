@@ -7,6 +7,8 @@ use App\Filament\Resources\UsageEventResource\Pages;
 use App\Filament\Support\UsageEventTable;
 use App\Models\UsageEvent;
 use Filament\Forms\Components\DatePicker;
+use App\Filament\Support\GatedByRole;
+use App\Filament\Support\Perm;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -14,6 +16,18 @@ use Illuminate\Database\Eloquent\Builder;
 
 class UsageEventResource extends Resource
 {
+    use GatedByRole;
+
+    protected static function viewAbility(): string
+    {
+        return 'logs.view';
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Perm::scopeToOwnedApps(parent::getEloquentQuery(), 'usage_events.app_id');
+    }
+
     protected static ?string $model = UsageEvent::class;
 
     protected static ?string $slug = 'nhat-ky';
@@ -27,11 +41,6 @@ class UsageEventResource extends Resource
     protected static ?string $pluralModelLabel = 'nhật ký yêu cầu';
 
     protected static ?int $navigationSort = 5;
-
-    public static function canCreate(): bool
-    {
-        return false;
-    }
 
     public static function table(Table $table): Table
     {

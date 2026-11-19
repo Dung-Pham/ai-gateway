@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AppStatus;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** Ứng dụng của tổ chức dùng Cổng AI (bảng `apps`). */
@@ -14,6 +15,11 @@ class ClientApp extends Model
     protected $guarded = [];
 
     protected $casts = ['status' => AppStatus::class];
+
+    public function owners(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'app_user', 'app_id', 'user_id');
+    }
 
     public function keys(): HasMany
     {

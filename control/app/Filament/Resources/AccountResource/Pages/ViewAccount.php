@@ -21,14 +21,15 @@ class ViewAccount extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('check')->label('Kiểm tra ngay')->icon('heroicon-m-arrow-path')->color('gray')
+            Actions\EditAction::make()->label('Sửa')->icon('heroicon-m-pencil-square'),
+            Actions\Action::make('check')->label('Kiểm tra ngay')->icon('heroicon-m-arrow-path')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
                 ->requiresConfirmation()->modalHeading('Kiểm tra phiên đăng nhập?')
                 ->modalDescription('Gateway sẽ gọi thử một lượt rất nhẹ. Lượt này tính vào hạn mức của tài khoản. (Khung dựng: chưa có gateway thật nên chỉ ghi nhận thao tác.)')
                 ->action(function () {
                     Audit::log('account.check', $this->record->label, ['ghi chú' => 'khung dựng, chưa gọi gateway']);
                     Notification::make()->title('Đã ghi nhận yêu cầu kiểm tra')->body('Khung dựng chưa nối với gateway thật.')->warning()->send();
                 }),
-            Actions\Action::make('pause')->label('Tạm dừng')->icon('heroicon-m-pause')->color('gray')
+            Actions\Action::make('pause')->label('Tạm dừng')->icon('heroicon-m-pause')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
                 ->visible(fn () => in_array($this->record->status, [AccountStatus::Active, AccountStatus::Draining]))
                 ->requiresConfirmation()->modalHeading("Tạm dừng {$this->record->label}?")
                 ->modalDescription('Tài khoản sẽ không nhận yêu cầu mới. Yêu cầu đang chạy vẫn hoàn tất. Có thể bật lại bất cứ lúc nào.')
@@ -38,7 +39,7 @@ class ViewAccount extends ViewRecord
                     Notification::make()->title("Đã tạm dừng {$this->record->label}")->success()->send();
                     $this->redirect(AccountResource::getUrl('view', ['record' => $this->record]));
                 }),
-            Actions\Action::make('resume')->label('Bật lại')->icon('heroicon-m-play')
+            Actions\Action::make('resume')->label('Bật lại')->icon('heroicon-m-play')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
                 ->visible(fn () => $this->record->status === AccountStatus::Paused)
                 ->requiresConfirmation()->modalHeading("Bật lại {$this->record->label}?")
                 ->action(function () {

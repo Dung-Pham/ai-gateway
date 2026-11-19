@@ -4,12 +4,21 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\AuditLogResource\Pages;
 use App\Models\AuditLog;
+use App\Filament\Support\GatedByRole;
+use App\Filament\Support\Perm;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
 class AuditLogResource extends Resource
 {
+    use GatedByRole;
+
+    protected static function viewAbility(): string
+    {
+        return 'audit.view';
+    }
+
     protected static ?string $model = AuditLog::class;
 
     protected static ?string $slug = 'he-thong/kiem-toan';

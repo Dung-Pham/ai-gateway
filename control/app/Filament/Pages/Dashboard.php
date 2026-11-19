@@ -19,6 +19,11 @@ class Dashboard extends BaseDashboard
 
     protected static ?int $navigationSort = 1;
 
+    public static function canAccess(): bool
+    {
+        return \App\Filament\Support\Perm::can('dashboard');
+    }
+
     public function getWidgets(): array
     {
         return [OverviewStats::class, TrafficChart::class, AttentionList::class, AccountGrid::class, AppUsage::class];

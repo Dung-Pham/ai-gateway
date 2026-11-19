@@ -13,6 +13,7 @@ enum AccountStatus: string implements HasLabel, HasColor, HasIcon
     case Cooldown = 'cooldown';
     case AuthExpired = 'auth_expired';
     case Draining = 'draining';
+    case Pending = 'pending';
 
     public function getLabel(): string
     {
@@ -22,6 +23,7 @@ enum AccountStatus: string implements HasLabel, HasColor, HasIcon
             self::Cooldown => 'Đang nghỉ',
             self::AuthExpired => 'Hết phiên',
             self::Draining => 'Rút dần',
+            self::Pending => 'Chờ đăng nhập',
         };
     }
 
@@ -33,6 +35,7 @@ enum AccountStatus: string implements HasLabel, HasColor, HasIcon
             self::Cooldown => 'warning',
             self::AuthExpired => 'danger',
             self::Draining => 'info',
+            self::Pending => 'gray',
         };
     }
 
@@ -44,6 +47,7 @@ enum AccountStatus: string implements HasLabel, HasColor, HasIcon
             self::Cooldown => 'heroicon-m-clock',
             self::AuthExpired => 'heroicon-m-x-circle',
             self::Draining => 'heroicon-m-arrow-down-circle',
+            self::Pending => 'heroicon-m-key',
         };
     }
 }

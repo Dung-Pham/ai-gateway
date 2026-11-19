@@ -31,6 +31,11 @@ class EmergencyStop extends Page implements HasActions
 
     protected static ?int $navigationSort = 3;
 
+    public static function canAccess(): bool
+    {
+        return \App\Filament\Support\Perm::can('emergency');
+    }
+
     public function stopAction(): Action
     {
         return Action::make('stop')->label('Tạm ngưng tất cả ứng dụng')->icon('heroicon-m-hand-raised')->color('danger')

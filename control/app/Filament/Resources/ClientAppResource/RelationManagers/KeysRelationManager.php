@@ -40,7 +40,7 @@ class KeysRelationManager extends RelationManager
                 TextColumn::make('last_used_at')->label('Dùng lần cuối')->since()->placeholder('Chưa dùng'),
             ])
             ->headerActions([
-                Tables\Actions\Action::make('issue')->label('Tạo khóa mới')->icon('heroicon-m-plus')
+                Tables\Actions\Action::make('issue')->label('Tạo khóa mới')->icon('heroicon-m-plus')->authorize(fn () => \App\Filament\Support\Perm::can('apps.manage'))
                     ->form([\Filament\Forms\Components\TextInput::make('name')->label('Tên khóa')->default('Khóa mới')->required()->maxLength(64)])
                     ->action(function (array $data) {
                         [, $plain] = AppKey::issue($this->getOwnerRecord(), $data['name']);
@@ -50,7 +50,7 @@ class KeysRelationManager extends RelationManager
                     }),
             ])
             ->actions([
-                Tables\Actions\Action::make('revoke')->label('Thu hồi')->icon('heroicon-m-no-symbol')->color('danger')
+                Tables\Actions\Action::make('revoke')->label('Thu hồi')->icon('heroicon-m-no-symbol')->color('danger')->authorize(fn () => \App\Filament\Support\Perm::can('apps.manage'))
                     ->visible(fn (AppKey $r) => $r->revoked_at === null)
                     ->requiresConfirmation()->modalHeading('Thu hồi khóa này?')
                     ->modalDescription('Ứng dụng đang dùng khóa này sẽ bị từ chối ngay lập tức. Không hoàn tác được: nếu cần, hãy tạo khóa mới.')

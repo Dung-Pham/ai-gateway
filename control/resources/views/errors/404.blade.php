@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('title', 'Không tìm thấy trang')
+@section('code', '404')
+@section('heading', 'Không tìm thấy trang')
+@section('message', 'Trang này không tồn tại, hoặc bạn không có quyền xem.')

@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('title', 'Đang bảo trì')
+@section('code', '503')
+@section('heading', 'Đang bảo trì')
+@section('message', 'Hệ thống sẽ sớm hoạt động lại.')
