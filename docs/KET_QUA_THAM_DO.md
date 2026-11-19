@@ -112,3 +112,23 @@ Rủi ro cần kiểm tra: lần thử đầu (chưa bật chế độ tệp) c�
 Hệ quả: **Gemini bị chặn tích hợp** trong đợt này. Đường tiếp theo (chưa làm, cần bạn chọn): (a) thử lại trên bản mới hơn (0.69.0 có sẵn) cài vào thư mục riêng, không đụng bản đang dùng; (b) dùng khóa API Gemini (tính tiền theo lượt, không phải gói đăng ký); (c) tạm bỏ Gemini khỏi phạm vi, làm Claude và Grok trước.
 
 **Cập nhật (cùng ngày): bản 0.69.0 cho kết quả y hệt.** Cài riêng vào `~/.probe/gemini-0.69` (bản toàn máy giữ nguyên 0.64.0). Lần thử thứ 4: `google_accounts.json` ghi lúc 17:52:28, `settings.json` bị đổi sang `gemini-api-key` sau 20 mili giây, vẫn không có `gemini-credentials.json`. Kết luận: **lỗi không do phiên bản 0.64.0**. Chưa xác định nguyên nhân. Còn một giả thuyết chưa thử: chế độ `NO_BROWSER` (dán mã) bị hỏng ở cả hai bản, trong khi luồng mặc định (tự mở trình duyệt, nhận mã qua cổng cục bộ) có thể lưu được token. Lần thử mặc định đầu tiên thất bại vì chạy trong Terminal nhúng của ứng dụng ("Authentication consent could not be obtained … run in an interactive terminal"), chưa thử trong Terminal hệ thống.
+
+## Gemini: NGUYÊN NHÂN THẬT đã xác định (19/11/2026)
+
+Ảnh chụp màn hình Terminal hệ thống của bạn (đăng nhập bằng trình duyệt, không `NO_BROWSER`) cho thấy chuỗi sự kiện rõ ràng:
+
+1. `Authentication succeeded` (bước Google thành công).
+2. Ngay sau đó CLI báo `Failed to sign in. Message: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products`.
+3. Vì từ chối, CLI **không lưu token** và rơi về màn nhập khóa API.
+
+**Kết luận: Gemini CLI (cả 0.64.0 và 0.69.0) không còn đăng nhập được bằng tài khoản Google cá nhân; đây là thông báo của chính CLI, không phải lỗi cấu hình của ta.** Các giả thuyết trước đó (cụt đường dẫn, chế độ `NO_BROWSER`, keychain, tiến trình chạy chồng, `selectedType`) **không phải nguyên nhân**: chúng chỉ là các triệu chứng phụ hoặc lỗi riêng đã gặp trên đường đi (cụt đường dẫn có thật nhưng chỉ gây lỗi 400 một lần). Tôi chưa tự kiểm chứng chính sách của Google ngoài thông báo này.
+
+Phát hiện tương ứng trên máy bạn: đã có sẵn **Antigravity CLI (`agy`)** tại `~/.local/bin/agy` (báo phiên bản 1.5.12) và thư mục `~/.gemini/antigravity*`. Đây là công cụ được thông báo trên để thay thế.
+
+`agy --help` (chỉ đọc, chưa đăng nhập) cho thấy chế độ không tương tác `--print`/`-p`, `--output-format text|json|stream-json`, `--input-format stream-json`, `--model`, `--mode accept-edits|auto|plan`, `--sandbox`, `--print-timeout`, `--settings` (JSON chỉ dùng cho phiên, không lưu), `--project`, `--conversation`, `acp` (máy chủ ACP qua stdio), `--dangerously-skip-permissions` (KHÔNG dùng).
+
+Hệ quả thiết kế:
+- Hãng "Gemini" trong thiết kế nên đổi thành **"Google (Antigravity, `agy`)"**. Toàn bộ giả định G1–G7 phải kiểm lại cho `agy`.
+- `agy` là tệp thực thi khoảng 280 MB, tự cập nhật qua một dịch vụ của Google (`releaseBaseUrl`): trong runner phải **tắt tự cập nhật và ghim phiên bản**, cần thêm tên miền của dịch vụ cập nhật vào phân tích tên miền.
+- Chưa biết `agy` đăng nhập thế nào trên máy không có trình duyệt, token lưu ở đâu, có dùng được nhiều tài khoản trên một máy không. Cần thăm dò (xem mục Antigravity trong THAM_DO_CLI).
+- **Không dùng bản `agy` và thư mục `~/.gemini` thật của bạn cho thăm dò** (đó là đăng nhập và hội thoại cá nhân của bạn). Thăm dò dùng `HOME` riêng như các CLI khác.

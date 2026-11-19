@@ -381,6 +381,39 @@ Theo tài liệu, Grok **tự lưu** mỗi hội thoại vào `$GROK_HOME/sessio
 
 **Điều cần chú ý riêng cho Grok khi vận hành:** tài liệu của CLI ghi token đăng nhập hết hạn sau 7 ngày (có mục "làm mới thông tin xác thực tự động"). **Chưa biết** việc làm mới có tự chạy ở chế độ không tương tác không. Nếu phải đăng nhập lại mỗi tuần thì cảnh báo hết phiên của gateway là tính năng bắt buộc; ghi nhận hành vi thật bằng cách theo dõi `auth.json` (không đọc nội dung) qua vài ngày: `stat "$PROBE_HOME/grok/auth.json"`.
 
+## Bổ sung cho Antigravity `agy` (thay Gemini CLI) (AG0–AG6)
+
+Lý do: Gemini CLI báo không còn hỗ trợ đăng nhập cá nhân và chỉ sang Antigravity (xem KET_QUA_THAM_DO). Cờ lệnh dưới đây lấy từ `agy --help` (1.5.12); **hành vi chưa thử**. Dùng `HOME` riêng, **không** dùng `~/.gemini` thật của bạn.
+
+```bash
+mkdir -p "$HOME/.probe/agy-home" && export AGY_ENV="HOME=$HOME/.probe/agy-home"
+```
+
+**AG0 — Đăng nhập (bạn tự làm, trong Terminal hệ thống):**
+```bash
+env HOME="$HOME/.probe/agy-home" agy
+```
+Cách đăng nhập (trình duyệt hay mã) và nơi lưu token **chưa biết**; ghi lại các bước và tệp mới sinh ra (chỉ tên/kích thước), như đã làm với Gemini.
+
+**AG1 — Token/chi phí có trong JSON? (tốn 1 lượt nhỏ):**
+```bash
+cd "$W" && printf '%s' "Trả lời đúng một từ: xin chào" | env $AGY_ENV /usr/bin/time -v -o "$R/ag1-agy.time" agy --print --output-format json --mode plan --sandbox --print-timeout 60s > "$R/ag1-agy.json" 2> "$R/ag1-agy.err"; echo "exit=$?"; jq 'keys' "$R/ag1-agy.json" 2>&1 | head
+```
+(Chưa biết `agy -p` có đọc prompt từ stdin không; nếu không, đưa prompt làm đối số cho thăm dò và ghi lại giới hạn.)
+
+**AG2 — Chưa đăng nhập trông thế nào (không tốn hạn mức):** dùng thư mục rỗng và `timeout`:
+```bash
+mkdir -p "$PROBE_HOME/empty-agy" && cd "$W" && timeout 40 env HOME="$PROBE_HOME/empty-agy" agy --print --output-format json --print-timeout 20s "ok" < /dev/null > "$R/ag2-agy.out" 2> "$R/ag2-agy.err"; echo "exit=$?"
+```
+
+**AG3 — Quyền thật có bị khóa không (tệp mồi `canary.txt`, 3 câu có/không như P7):** chạy với `--sandbox --mode plan` và với `--mode plan` không `--sandbox`; **cấm** `--dangerously-skip-permissions`.
+
+**AG4 — Ảnh vào/ra, tên miền, song song cùng `HOME`, tài nguyên (RAM, 280 MB tệp thực thi), lưu hội thoại ra đĩa (`~/.gemini/antigravity-cli/{conversations,history.jsonl,brain}` thấy trên máy bạn):** lặp P4, P5, P6, P8, P9, G11 cho `agy`. Nơi ghi `cli.log` và `history.jsonl` **có thể chứa nội dung prompt**; kiểm bằng chuỗi dấu hiệu độc nhất.
+
+**AG5 — Tự cập nhật:** ghi lại `agy update`/cơ chế tự cập nhật, tên miền dịch vụ cập nhật, và có tắt được bằng cờ/biến môi trường/`settings.json` không.
+
+**AG6 — Nhiều tài khoản trên một máy:** thử hai `HOME` khác nhau có giữ hai đăng nhập tách biệt không (Gemini CLI ở chế độ keychain thì không).
+
 ## 12. Gửi kết quả cho tôi
 
 Che thông tin cá nhân trước:
