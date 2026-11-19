@@ -1,0 +1,19 @@
+#!/bin/sh
+# MẪU tường lửa cho máy AI (cần ROOT). Docker bỏ qua ufw/firewalld cho cổng đã công bố, nên luật PHẢI đặt ở chuỗi DOCKER-USER.
+# Sửa 3 biến dưới đây rồi chạy bằng root; cho chạy lại sau mỗi lần khởi động (xem docs/BAN_GIAO_TRIEN_KHAI.md mục 5).
+SEO_STUDIO_IP="10.0.0.10"          # máy chủ ứng dụng được gọi API (có thể nhiều IP: lặp dòng ACCEPT)
+ADMIN_NET="10.0.9.0/24"            # dải mạng/VPN của quản trị viên được mở giao diện
+GATEWAY_PORT=8771                  # khớp GATEWAY_PORT trong deploy/.env
+WEB_PORT=8080                      # khớp WEB_PORT trong deploy/.env
+
+iptables -N AIGW-IN 2>/dev/null || iptables -F AIGW-IN
+iptables -A AIGW-IN -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -A AIGW-IN -p tcp --dport "$GATEWAY_PORT" -s "$SEO_STUDIO_IP" -j RETURN
+iptables -A AIGW-IN -p tcp --dport "$WEB_PORT" -s "$ADMIN_NET" -j RETURN
+iptables -A AIGW-IN -j DROP
+# Chỉ áp cho lưu lượng ĐI VÀO cổng đã công bố của Cổng AI (DNAT): các luồng khác của Docker giữ nguyên.
+iptables -D DOCKER-USER -m conntrack --ctorigdstport "$GATEWAY_PORT" --ctdir ORIGINAL -j AIGW-IN 2>/dev/null
+iptables -D DOCKER-USER -m conntrack --ctorigdstport "$WEB_PORT" --ctdir ORIGINAL -j AIGW-IN 2>/dev/null
+iptables -I DOCKER-USER -m conntrack --ctorigdstport "$WEB_PORT" --ctdir ORIGINAL -j AIGW-IN
+iptables -I DOCKER-USER -m conntrack --ctorigdstport "$GATEWAY_PORT" --ctdir ORIGINAL -j AIGW-IN
+echo "Đã đặt luật DOCKER-USER. Kiểm tra: iptables -S DOCKER-USER; iptables -S AIGW-IN"
