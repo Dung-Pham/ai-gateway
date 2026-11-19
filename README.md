@@ -9,7 +9,8 @@
 | [docs/THIET_KE.md](docs/THIET_KE.md) | Kiến trúc, dữ liệu, đo lường, bảo mật, API, vận hành |
 | [docs/GIAO_DIEN.md](docs/GIAO_DIEN.md) | UX, định hướng nghệ thuật (xanh dương), màn hình |
 | [docs/KE_HOACH_BUILD.md](docs/KE_HOACH_BUILD.md) | Các giai đoạn, nghiệm thu, rủi ro |
-| [docs/THAM_DO_CLI.md](docs/THAM_DO_CLI.md) | Lệnh thăm dò CLI (Giai đoạn 0), **chưa chạy** |
+| [docs/THAM_DO_CLI.md](docs/THAM_DO_CLI.md) | Lệnh thăm dò CLI (Giai đoạn 0) |
+| [docs/KET_QUA_THAM_DO.md](docs/KET_QUA_THAM_DO.md) | **Kết quả thăm dò**: mới chạy phần chưa đăng nhập, chờ đăng nhập tài khoản thử |
 | [docs/CACH_LY_MAY_CHU.md](docs/CACH_LY_MAY_CHU.md) | Cách ly Cổng AI khỏi server chính (máy riêng, tường lửa, container) |
 | [docs/CHUAN_BI_SERVER.md](docs/CHUAN_BI_SERVER.md) | Cấu hình nằm ở đâu trong giao diện; cần chuẩn bị gì cho server |
 | [docs/KIEM_CHUNG_GIAO_DIEN.md](docs/KIEM_CHUNG_GIAO_DIEN.md) | Kết quả kiểm chứng khung giao diện: đã thấy, đã đo, chưa làm |
