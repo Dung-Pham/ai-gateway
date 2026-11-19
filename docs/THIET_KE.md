@@ -39,7 +39,7 @@ Thiết kế dưới đây dựa trên các giả định sau. Mỗi giả đị
 | G2. Đọc được phần trăm hạn mức (phiên/tuần) bằng cách không tương tác | Mất lớp đo "% thật"; chỉ còn đếm nội bộ và bắt lỗi 429 |
 | G3. Khi chạm giới hạn, CLI trả thông báo/mã lỗi nhận dạng được, có kèm giờ reset | Phải dùng thời gian nghỉ cố định rồi thử lại |
 | G4. CLI nhận ảnh làm đầu vào mà **không cần bật công cụ đọc tệp** (ví dụ qua đầu vào dạng luồng) | Phải tìm cách an toàn khác, hoặc tắt khả năng ảnh vào cho hãng đó |
-| G0. Mỗi hãng còn đăng nhập được bằng gói đăng ký qua CLI | **Gemini CLI: sai** (CLI báo ngừng hỗ trợ đăng nhập cá nhân, chuyển sang Antigravity `agy`); các hãng khác chưa thử |
+| G0. Mỗi hãng còn đăng nhập được bằng gói đăng ký qua CLI | **Gemini CLI: sai** (CLI báo ngừng hỗ trợ đăng nhập cá nhân). Thay bằng **Antigravity `agy`: đúng, đã thử trong container** (token ở tệp thường, xem KET_QUA_THAM_DO đợt 3); Claude và Grok: đúng |
 | G5. Có gói nào đó sinh được ảnh qua CLI | Sinh ảnh chuyển sang đường khác (API key riêng) hoặc không hỗ trợ |
 | G6. Hai tiến trình CLI cùng dùng một thư mục cấu hình không làm hỏng việc làm mới token | Phải khóa theo tài khoản, chỉ một tiến trình ghi một lúc |
 | G7. Có cờ chế độ chỉ-trò-chuyện/sandbox chỉ đọc cho Codex và Gemini | Phải tăng cường cách ly ở tầng container |

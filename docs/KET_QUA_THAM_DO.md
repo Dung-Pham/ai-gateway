@@ -4,7 +4,7 @@ Cập nhật: 19/11/2026, trên máy thử của bạn (Linux, 8 nhân, RAM 15 G
 
 ## Tình trạng tổng quát
 
-**Đã chạy phần không cần đăng nhập, và phần có đăng nhập cho Claude và Grok** (xem mục "Đợt 2" ở cuối). Gemini CLI không đăng nhập được; Antigravity (`agy`) chưa đăng nhập. Chưa có tài khoản thử nào đăng nhập vào thư mục thử `~/.probe/…` (đăng nhập do bạn làm, tôi không xử lý). Nên **chưa có lượt gọi AI nào được thực hiện** và chưa dùng hạn mức của tài khoản nào. Môi trường không có khóa API (đã kiểm tra: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`… đều trống) nên CLI không thể âm thầm dùng tài khoản khác.
+**Đã chạy phần không cần đăng nhập, và phần có đăng nhập cho Claude và Grok** (xem mục "Đợt 2" ở cuối). Gemini CLI không đăng nhập được; **Antigravity (`agy`) đã thăm dò, dùng được trong container** (xem mục "Đợt 3"). Chưa có tài khoản thử nào đăng nhập vào thư mục thử `~/.probe/…` (đăng nhập do bạn làm, tôi không xử lý). Nên **chưa có lượt gọi AI nào được thực hiện** và chưa dùng hạn mức của tài khoản nào. Môi trường không có khóa API (đã kiểm tra: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`… đều trống) nên CLI không thể âm thầm dùng tài khoản khác.
 
 | Mục | Trạng thái |
 |---|---|
@@ -203,3 +203,46 @@ Grok: G4 (ảnh vào), G6 (song song), G10 chỉ chạy lúc chưa đăng nhập
 - Kiểm chứng sau triển khai, qua HTTP thật: không khóa trả 401; có khóa liệt kê `opus, sonnet, haiku`; câu bẫy gọi công cụ Claude Docs trả `KHONGCO` thay vì để mô hình phát lệnh gọi; `/v1/search` hoạt động.
 - Về `/v1/search` trả 0 kết quả ở một lượt: so sánh cơ chế trên 3 lượt mỗi bên cho thấy mô hình dùng WebSearch và WebFetch giống hệt nhau, số công cụ lúc khởi tạo giảm từ 10 xuống 2 (bỏ 8 công cụ Docs, giữ đúng 2 công cụ web), số kết quả 1/1/1 (cũ) và 1/1/2 (mới). Trong tổng thể các lượt đo, bản mới có hai lượt 0 kết quả còn bản cũ không có lượt nào; mẫu quá nhỏ để kết luận có liên quan hay không, và không có cơ chế nào giải thích được. **Cần theo dõi tỉ lệ 0 kết quả của `/v1/search` trong vài ngày**; nếu tăng rõ rệt thì quay lại bản cũ.
 - Đường lui: `cp ~/.local/share/claude-bridge/claude_bridge.py.bak-20261119-pre-strict-mcp ~/.local/share/claude-bridge/claude_bridge.py && systemctl --user restart claude-bridge.service`.
+
+
+---
+
+# Đợt 3: Antigravity `agy` (thay Gemini CLI), 19/11/2026
+
+Phiên bản `agy` 1.5.12, gói của tài khoản: Google AI Pro. Đây là tài khoản **cá nhân của bạn** (xem ghi chú đầu tiên về keychain). Tổng cộng khoảng 12 lượt gọi nhỏ.
+
+## 1. Thông tin đăng nhập là TOÀN CỤC trên máy phát triển, không tách theo `HOME`
+- Trong thư mục `HOME` trống (4 thư mục khác nhau), `agy` vẫn xác thực thành công, kể cả khi không còn tiến trình `agy` nào chạy. Theo dõi lời gọi hệ thống cho thấy nó **kết nối thẳng `/run/user/<uid>/bus`** (D-Bus của phiên đồ họa, tới keychain), và cứng đường dẫn này nên lần thử "gỡ biến D-Bus" của tôi không có tác dụng thật.
+- Hệ quả: **đổi `HOME` không tách được tài khoản `agy` trên máy có keychain**; các lượt gọi `agy` trên máy này (kể cả ở tab "thư mục thử") đã dùng chính tài khoản Google AI Pro trong keychain của bạn. Tôi không biết lần "đăng nhập" ở tab đầu có thật là đăng nhập mới hay `agy` tự nhận đăng nhập có sẵn (màn chào hiện ngay tài khoản).
+- Không có tệp nào trong thư mục thật `~/.config/antigravity` hay `~/.gemini` bị sửa trong thời gian thăm dò (kiểm tra bằng giờ sửa).
+
+## 2. Đăng nhập không có trình duyệt, trong container không keychain
+- Trong container sạch (không D-Bus, `HOME` tạm), `agy --print` in `Authentication required. Please visit the URL to log in:` kèm đường dẫn Google (chuyển hướng về `https://antigravity.google/oauth-callback`), rồi **chờ mã dán vào trong 60 giây**, sau đó thoát mã 1 với JSON `{"status":"ERROR","error":"authentication failed or timed out","finished_reason":"error"}`. 60 giây là quá ngắn cho việc đăng nhập thủ công.
+- Chạy `agy` ở chế độ tương tác (TUI) trong container: màn "Select login method: Google OAuth / Use a Google Cloud project", không thấy giới hạn thời gian; đã đăng nhập thành công bằng cách dán mã.
+- **Token lưu ở một tệp thường:** `$HOME/.gemini/antigravity-cli/antigravity-oauth-token` (590 byte, quyền `0600`), JSON với ba khóa: `auth_method`, `id_token_email`, `token`. **Không mã hóa** (JSON thuần): coi như bí mật, bảo vệ bằng quyền tệp và volume riêng.
+- Đường dẫn đăng nhập yêu cầu các phạm vi quyền rộng (`cloud-platform`, `userinfo`, `aicode`, `cclog`, `experimentsandconfigs`): nên dùng **tài khoản Google riêng cho gateway**.
+
+## 3. Token sống qua container mới và chạy được khi cứng hóa
+Container mới, cùng volume token, với `--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit 256`, `--memory 1g`, `--cpus 2`, `/tmp` là tmpfs: `status: SUCCESS`, 32 giây tổng. **Mô hình "một volume xác thực riêng cho mỗi tài khoản" khả thi cho `agy`.**
+
+## 4. Mô hình lưu trữ đề xuất cho runner `agy` (đã thử và chạy)
+`agy` ghi nội dung phiên (`brain/<hội thoại>/implementation_plan.md`, `conversations`, `conversation_summaries.db`, nhật ký `log/`) vào **cùng thư mục** chứa token. Cách tách đã kiểm chứng: **`HOME` là `tmpfs`** (mất khi container thoát), chỉ **chép tệp token vào lúc khởi động** và chép ngược khi thoát nếu CLI làm mới nó. Kết quả: `status: SUCCESS`, trả lời "xin chào", token không đổi, **0 tệp phiên còn lại** trên volume token (khoảng 64 tệp phát sinh chỉ nằm trong tmpfs). Lưu ý: gắn riêng một tệp vào thư mục chưa có khiến Docker tạo thư mục cha thuộc root và `agy` không ghi nhật ký được; phải dùng cách chép như trên.
+
+## 5. Quyền và công cụ
+| | Kết quả |
+|---|---|
+| Mặc định không tương tác | Cấu hình `toolPermission=request-review`. Mô hình **vẫn cố gọi công cụ** (`read_file`), bị **tự từ chối** vì chế độ không tương tác không hỏi được. JSON có trường **`denied_actions`** liệt kê các lần cố gọi bị chặn: tín hiệu tốt để phát hiện lời nhắc độc hại. Thông báo gợi ý thêm quy tắc `permissions.allow` hoặc `--dangerously-skip-permissions` (**cấm dùng cờ này**) |
+| Tệp mồi ngoài thư mục làm việc | **Không lộ** ở cả 3 chế độ thử (mặc định, `--mode plan`, `--mode plan --sandbox`); đã tìm chuỗi mồi trong câu trả lời và trong toàn bộ nhật ký, dữ liệu phiên (0 tệp) |
+| `id`, ghi tệp | Không chạy, không tạo tệp |
+| Hạn chế | Rào chắn **duy nhất** vẫn là hệ thống xin quyền (giống Claude): công cụ tồn tại và mô hình cố gọi. Có các khóa cài đặt `disabledTools`, `permissions`, `mcpServers`, `sandboxMode` (thấy trong tệp thực thi, **chưa thử** ngữ nghĩa); cờ `--settings` nhận JSON cho riêng phiên |
+| `--mode plan` | **Không dùng cho trò chuyện**: agent tạo tệp kế hoạch `implementation_plan.md` thay vì trả lời, và câu trả lời bị trống |
+| Prompt thường (không công cụ) | Trả lời bình thường ("xin chào"), `denied: None` |
+
+## 6. Số liệu
+- **G1 đạt:** JSON có `usage` (`input_tokens`, `output_tokens`, `thinking_tokens`, `cache_read_tokens`, `total_tokens`).
+- **G2:** không thấy thông tin phần trăm hạn mức trong đầu ra (chưa tìm kỹ).
+- **Chi phí nền cao:** khoảng 9.600 đến 12.000 token cho một lượt "trả lời một từ".
+- **Độ trễ:** khoảng 23 đến 54 giây cho lượt tầm thường (chế độ `plan` suy luận nhiều); khoảng 25 đến 32 giây ở chế độ mặc định.
+
+## 7. Còn chưa làm với `agy`
+Tên miền cần ra ngoài (chưa ghi qua bộ ghi tên miền; **có cơ chế tự cập nhật** thử ghi tệp `.update_test…` cạnh tệp thực thi); cách **tắt tự cập nhật**; ảnh vào và ra; song song cùng volume; thử `disabledTools` và `permissions.deny`; nhiều tài khoản (mỗi tài khoản một volume, đã đủ cơ sở nhưng chưa thử với hai tài khoản Google).
