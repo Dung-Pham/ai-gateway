@@ -41,6 +41,8 @@ class RunnerService:
         try:
             ctx = Ctx.create(self.cfg, str(req.get("request_id", ""))[:40])
             ctx.model = req["model"]
+            ctx.capability = req.get("capability", "text")
+            ctx.search = req.get("_search")
             self.adapter.prepare(ctx)
             args, stdin, extra = self.adapter.command(ctx, req)
             env = build_env(self.cfg, ctx.home, ctx.tmp, extra)

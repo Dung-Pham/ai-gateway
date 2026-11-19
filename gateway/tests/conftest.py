@@ -69,12 +69,14 @@ def seed(path):
           (i, prov, label, "active", 2, f"http://runner-{label}:8800"))
     q("insert into pools(id,name,strategy) values (1,'Viết bài','least_used'),(2,'Dự phòng','priority')")
     q("insert into pool_members(pool_id,account_id,priority,weight) values (1,1,1,1),(1,2,2,1),(2,3,1,1)")
-    q("insert into capabilities(id,code,name,risk_level,enabled) values (1,'text','Văn bản','low',1),(2,'image_in','Ảnh','medium',1)")
+    q("insert into capabilities(id,code,name,risk_level,enabled) values (1,'text','Văn bản','low',1),(2,'image_in','Ảnh','medium',1),(3,'web_search','Tìm web','high',1)")
     for i, (name, slug, st) in enumerate([("App A", "a", "active"), ("App B", "b", "suspended"), ("App C", "c", "active"), ("App D", "d", "active")], 1):
         q("insert into apps(id,name,slug,status) values (?,?,?,?)", (i, name, slug, st))
     # App A: text -> pool 1, dự phòng pool 2, chỉ haiku/sonnet. App C: chưa cấp gì. App D: pool 1 và model bất kỳ.
     q("insert into app_policies(app_id,capability_id,allowed_models,pool_id,fallback_pool_id,enabled) values (1,1,?,1,2,1)", ('["haiku","sonnet","grok-4.7"]',))
     q("insert into app_policies(app_id,capability_id,allowed_models,pool_id,fallback_pool_id,enabled) values (4,1,null,1,null,1)")
+    # App A có tìm web (pool 1, dự phòng pool 2 chứa grok: phải bị loại vì tìm web chỉ chạy ở claude); App D chỉ có văn bản
+    q("insert into app_policies(app_id,capability_id,allowed_models,pool_id,fallback_pool_id,enabled) values (1,3,null,1,2,1)")
     q("insert into app_policies(app_id,capability_id,allowed_models,pool_id,enabled) values (2,1,null,1,1)")
     from gateway.auth import hash_key as h
     keys = [(1, KEY_A, None, None), (1, KEY_REVOKED, None, "2026-01-01 00:00:00"), (1, KEY_EXPIRED, "2026-11-01 00:00:00", None),

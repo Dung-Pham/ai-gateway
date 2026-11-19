@@ -10,6 +10,7 @@ import os
 import re
 
 from .context import copy_secret, sync_back
+from . import search as S
 from .errors import RunnerError, looks_rate_limited
 
 MODEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
@@ -68,8 +69,12 @@ class Adapter:
     def validate(self, req):
         if not MODEL_RE.match(req.get("model", "")):
             raise RunnerError("bad_request", "Tên model không hợp lệ.")
-        if req.get("capability", "text") not in self.capabilities:
+        cap = req.get("capability", "text")
+        if cap not in self.capabilities:
             raise RunnerError("unsupported", "Khả năng chưa được hỗ trợ ở runner này.")
+        if cap == "web_search":
+            req["_search"] = S.validate_search(req)      # chuẩn hóa một lần, các bước sau dùng bản này
+            return
         system, user = req.get("system", ""), req.get("user", "")
         if not isinstance(system, str) or not isinstance(user, str) or not user.strip():
             raise RunnerError("bad_request", "Thiếu nội dung.")
@@ -86,6 +91,7 @@ class Adapter:
 # =============================================================================
 class ClaudeAdapter(Adapter):
     name = "claude"
+    capabilities = {"text", "web_search"}
     token_relpath = ".credentials.json"
 
     def _cfgdir(self, ctx):
@@ -97,9 +103,15 @@ class ClaudeAdapter(Adapter):
             raise RunnerError("auth_expired", "Chưa có token Claude trong volume xác thực.")
 
     def command(self, ctx, req):
+        search = req.get("capability", "text") == "web_search"
+        # Tìm web mức NHẸ: duy nhất WebSearch (phía hãng thực hiện). TUYỆT ĐỐI không thêm WebFetch: nó tải trang từ máy runner.
+        tools = "WebSearch" if search else ""
         args = [self.cfg.cli_bin, "-p", "--model", req["model"], "--output-format", "stream-json", "--verbose",
-                "--tools", "", "--setting-sources", "", "--no-session-persistence", "--disable-slash-commands",
+                "--tools", tools, "--setting-sources", "", "--no-session-persistence", "--disable-slash-commands",
                 "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+        if search:
+            args += ["--allowedTools", "WebSearch", "--max-turns", "6", "--system-prompt=" + S.SEARCH_SYSTEM]
+            return args, S.build_prompt(req["_search"]).encode("utf-8"), {"CLAUDE_CONFIG_DIR": self._cfgdir(ctx)}
         system, user = req.get("system", ""), req["user"]
         if system and len(system.encode()) <= self.cfg.max_prompt_bytes:
             args.append("--system-prompt=" + system)
@@ -117,8 +129,11 @@ class ClaudeAdapter(Adapter):
                 except ValueError:
                     pass
         init = next((e for e in events if e.get("type") == "system" and e.get("subtype") == "init"), None)
-        if init is not None and (init.get("tools") or init.get("mcp_servers")):
-            raise RunnerError("policy_violation", "Claude để lộ công cụ hoặc máy chủ MCP dù đã tắt.")
+        search = getattr(ctx, "capability", "text") == "web_search"
+        if init is not None:
+            extra = [t for t in (init.get("tools") or []) if not (search and t == "WebSearch")]
+            if extra or init.get("mcp_servers"):
+                raise RunnerError("policy_violation", "Claude để lộ công cụ hoặc máy chủ MCP ngoài danh sách cho phép.")
         quota, limited = {}, False
         for e in events:
             if e.get("type") == "rate_limit_event":
@@ -142,12 +157,21 @@ class ClaudeAdapter(Adapter):
             raise RunnerError("rate_limited", "Hãng báo đã chạm giới hạn.")
         u = res.get("usage") or {}
         models = list((res.get("modelUsage") or {}).keys())
-        return {"text": text, "model": models[0] if models else req_model(ctx),
+        if search:
+            sq = ctx.search
+            text_out = ""
+            results = S.clean_results(S.extract_array(text), sq["max_results"], sq["include_domains"], sq["exclude_domains"])
+        else:
+            text_out, results = text, None
+        out = {"text": text_out, "model": models[0] if models else req_model(ctx),
                 "usage": _tokens(input_tokens=u.get("input_tokens"), output_tokens=u.get("output_tokens"),
                                  cache_read_tokens=u.get("cache_read_input_tokens"),
                                  cache_creation_tokens=u.get("cache_creation_input_tokens")),
                 "cost_usd": res.get("total_cost_usd"), "quota": quota, "denied_actions": [],
                 "estimated": False}
+        if results is not None:
+            out["results"] = results
+        return out
 
     def finish(self, ctx):
         sync_back(os.path.join(self._cfgdir(ctx), self.token_relpath), os.path.join(self.cfg.auth_dir, self.token_relpath))

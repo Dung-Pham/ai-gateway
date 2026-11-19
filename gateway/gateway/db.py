@@ -71,11 +71,14 @@ class Store:
             rows = c.execute(select(l).where(l.c.app_id == app_id, (l.c.capability_code.is_(None)) | (l.c.capability_code == capability))).mappings().all()
         return [dict(r) for r in rows]
 
-    def units_since(self, app_id: int, since: datetime) -> int:
+    def units_since(self, app_id: int, since: datetime, capability: str | None = None) -> int:
+        """Đơn vị đã dùng từ mốc `since`. capability=None: cộng mọi khả năng (hạn mức chung); có giá trị: chỉ khả năng đó."""
         u = self.t["usage_events"]
+        q = select(func.coalesce(func.sum(u.c.weighted_units), 0)).where(u.c.app_id == app_id, u.c.ts >= since, u.c.status == "ok")
+        if capability:
+            q = q.where(u.c.capability == capability)
         with self.engine.connect() as c:
-            v = c.execute(select(func.coalesce(func.sum(u.c.weighted_units), 0)).where(u.c.app_id == app_id, u.c.ts >= since, u.c.status == "ok")).scalar()
-        return int(v or 0)
+            return int(c.execute(q).scalar() or 0)
 
     def model_weight(self, model: str) -> float:
         w = self.t["model_weights"]

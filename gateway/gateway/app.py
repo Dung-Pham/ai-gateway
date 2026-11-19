@@ -19,6 +19,7 @@ from .config import Settings
 from .db import Store, make_engine
 from .errors import ApiError
 from .messages import flatten
+from .search import MAX_RESULTS, domains, reclean
 from .runner_client import HttpRunnerClient, RunnerRef, validate_runner_url
 from .state import State
 
@@ -69,12 +70,12 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
             raise ApiError(401, "invalid_admin_token", "Không có quyền.")
 
     # ------------------------------------------------------------------ giới hạn theo ứng dụng
-    async def enforce_limits(app_id: int, limits: list[dict]) -> list[str]:
+    async def enforce_limits(app_id: int, limits: list[dict], capability: str) -> list[str]:
         now = clock.now()
         warnings: list[str] = []
         hard = [l for l in limits if l["mode"] == "hard"]
         hard_rpm = min([l["rpm"] for l in hard if l["rpm"]], default=0)
-        if not state.check_rpm(app_id, hard_rpm, clock.epoch()):
+        if not state.check_rpm((app_id, capability), hard_rpm, clock.epoch()):   # cửa sổ riêng cho từng khả năng
             raise ApiError(429, "app_rpm", "Vượt số yêu cầu mỗi phút của ứng dụng.", {"Retry-After": "30"})
         hard_conc = min([l["max_concurrency"] for l in hard if l["max_concurrency"]], default=0)
         if hard_conc and state.app_inflight[app_id] >= hard_conc:
@@ -85,7 +86,7 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
                 lim = l[field]
                 if not lim:
                     continue
-                used = await threaded(store.units_since, app_id, since)
+                used = await threaded(store.units_since, app_id, since, l["capability_code"])   # hạn mức riêng của một khả năng chỉ đếm khả năng đó
                 if used >= lim:
                     if l["mode"] == "hard":
                         nxt = (since + timedelta(days=1)) if field == "units_per_day" else (since.replace(day=28) + timedelta(days=4)).replace(day=1)
@@ -161,14 +162,18 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
             raise ApiError(403, "model_not_allowed", "Ứng dụng không được dùng model này.")
 
         limits = await threaded(store.limits, app_id, "text")
-        warnings = await enforce_limits(app_id, limits)
+        warnings = await enforce_limits(app_id, limits, "text")
 
         cands = [a for a in order([a for a in primary if a["provider"] == provider], strategy, (app_id, "p"))] + \
                 [a for a in order([a for a in fallback if a["provider"] == provider and a["id"] not in {x["id"] for x in primary}], "least_used", (app_id, "f"))]
         request_id = "req_" + secrets.token_hex(6)
         state.app_inflight[app_id] += 1
         try:
-            return await dispatch(ident, request_id, provider, model, system, user, cands, warnings, t0)
+            def build(res, tin, tout):
+                return {"id": "chatcmpl-" + request_id[4:], "object": "chat.completion", "created": int(clock.epoch()), "model": f"{provider}:{model}",
+                        "choices": [{"index": 0, "message": {"role": "assistant", "content": res["text"]}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": tin, "completion_tokens": tout, "total_tokens": tin + tout}}
+            return await dispatch(ident, request_id, "text", provider, model, {"system": system, "user": user}, cands, warnings, t0, build)
         finally:
             state.app_inflight[app_id] = max(0, state.app_inflight[app_id] - 1)
 
@@ -182,7 +187,8 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
             state.inc("metering_failed_total")
             log.error(json.dumps({"event": "metering_failed", "request_id": request_id, "type": type(e).__name__}))
 
-    async def dispatch(ident, request_id, provider, model, system, user, cands, warnings, t0):
+    async def dispatch(ident, request_id, capability, provider, model, payload, cands, warnings, t0, build):
+        """Dùng chung cho mọi khả năng: chọn tài khoản, gọi runner, thử lại tối đa 1 lần khi hãng báo giới hạn/hết phiên."""
         attempts, last = 0, None
         for acc in cands:
             if attempts >= 2:
@@ -201,31 +207,30 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
                     continue
                 attempts += 1
                 t1 = time.monotonic()
-                _code, res = await runner.run(RunnerRef(acc["label"], url, secret),
-                                              {"request_id": request_id, "capability": "text", "model": model, "system": system, "user": user})
+                _code, res = await runner.run(RunnerRef(acc["label"], url, secret), {"request_id": request_id, "capability": capability, "model": model, **payload})
             finally:
                 state.release_slot(acc["label"])
             lat = int((time.monotonic() - t1) * 1000)
             if res.get("ok"):
-                return await success(ident, acc, provider, model, res, request_id, lat, warnings, t0)
+                return await success(ident, acc, capability, provider, model, res, request_id, lat, warnings, build)
             cls = res.get("error_class", "upstream_error")
             last = (cls, res.get("message", ""))
             state.last_error[acc["label"]] = cls
             state.inc(f"runner_errors_total{{class=\"{cls}\"}}")
             if cls == "rate_limited":
                 state.set_cooldown(acc["label"], _resume_at(res, clock.epoch(), settings.default_cooldown_s))
-                await record(ident, acc, "text", model, "rate_limited", cls, (0, 0, 0), lat, request_id)
+                await record(ident, acc, capability, model, "rate_limited", cls, (0, 0, 0), lat, request_id)
             elif cls == "auth_expired":
                 state.flags[acc["label"]] = "auth_expired"
-                await record(ident, acc, "text", model, "error", cls, (0, 0, 0), lat, request_id)
-            elif cls in ("busy",):
+                await record(ident, acc, capability, model, "error", cls, (0, 0, 0), lat, request_id)
+            elif cls == "busy":
                 pass
             elif cls == "tripped":
                 state.flags[acc["label"]] = "tripped"
             else:
                 if cls == "policy_violation":
                     state.flags[acc["label"]] = "tripped"
-                await record(ident, acc, "text", model, "error", cls, (0, 0, 0), lat, request_id)
+                await record(ident, acc, capability, model, "error", cls, (0, 0, 0), lat, request_id)
             if cls not in RETRYABLE:
                 break
         if attempts == 0 and last is None:
@@ -238,7 +243,7 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
                         "unsupported": (501, "capability_not_supported")}.get(cls, (502, "upstream_error"))
         raise ApiError(status, code, "Yêu cầu không hoàn thành: " + cls, {"Retry-After": "30"} if status in (429, 503) else {})
 
-    async def success(ident, acc, provider, model, res, request_id, lat, warnings, t0):
+    async def success(ident, acc, capability, provider, model, res, request_id, lat, warnings, build):
         u = res.get("usage") or {}
         tin = int(u.get("input_tokens", 0)) + int(u.get("cache_read_tokens", 0)) + int(u.get("cache_creation_tokens", 0))
         tout = int(u.get("output_tokens", 0))
@@ -247,7 +252,7 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
         if res.get("quota"):
             state.quota[acc["label"]] = res["quota"]
         state.last_error.pop(acc["label"], None)
-        await record(ident, acc, "text", model, "ok", None, (tin, tout, weighted), lat, request_id)
+        await record(ident, acc, capability, model, "ok", None, (tin, tout, weighted), lat, request_id)
         state.inc("requests_ok_total")
         if ident.get("key_id"):
             try:
@@ -257,11 +262,64 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
         headers = {"X-Gateway-Account": acc["label"], "X-Gateway-Request-Id": request_id, "X-Gateway-Units": str(weighted)}
         if warnings:
             headers["X-Gateway-Warning"] = ",".join(warnings)
-        out = {"id": "chatcmpl-" + request_id[4:], "object": "chat.completion", "created": int(clock.epoch()),
-               "model": f"{provider}:{model}",
-               "choices": [{"index": 0, "message": {"role": "assistant", "content": res["text"]}, "finish_reason": "stop"}],
-               "usage": {"prompt_tokens": tin, "completion_tokens": tout, "total_tokens": tin + tout}}
-        return JSONResponse(out, headers=headers)
+        return JSONResponse(build(res, tin, tout), headers=headers)
+
+    # ------------------------------------------------------------------ POST /v1/search (tương thích cầu nối cũ)
+    @app.post("/v1/search")
+    async def search(request: Request):
+        t0 = time.monotonic()
+        state.inc("requests_total")
+        ident = await authenticate(request)
+        raw = await request.body()
+        if len(raw) > 100_000:
+            raise ApiError(413, "request_too_large", "Thân yêu cầu quá lớn.")
+        try:
+            body = json.loads(raw)
+            assert isinstance(body, dict)
+        except (ValueError, AssertionError):
+            raise ApiError(400, "invalid_request", "JSON không hợp lệ.")
+        query = body.get("query")
+        if not isinstance(query, str) or not query.strip() or len(query) > 400:
+            raise ApiError(400, "invalid_request", "Truy vấn phải là chuỗi 1 đến 400 ký tự.")
+        try:
+            n = max(1, min(MAX_RESULTS, int(body.get("max_results") or 5)))
+        except (TypeError, ValueError):
+            raise ApiError(400, "invalid_request", "max_results không hợp lệ.")
+        include, exclude = domains(body.get("include_domains")), domains(body.get("exclude_domains"))
+
+        app_id = ident["app_id"]
+        pol = await threaded(store.policy, app_id, "web_search")
+        if not pol or not pol["policy_enabled"] or not pol["cap_enabled"]:
+            raise ApiError(403, "capability_not_granted", "Ứng dụng chưa được cấp khả năng tìm web.")
+        model = body.get("model") if isinstance(body.get("model"), str) and body.get("model") else settings.search_model
+        if ":" in model:
+            prov, model = model.split(":", 1)
+            if prov != "claude":
+                raise ApiError(404, "model_not_found", "Tìm web hiện chỉ hỗ trợ hãng claude.")
+        if not MODEL_RE.match(model):
+            raise ApiError(404, "model_not_found", "Model không tồn tại.")
+        allowed = pol["allowed_models"]
+        if allowed and model not in allowed and f"claude:{model}" not in allowed:
+            raise ApiError(403, "model_not_allowed", "Ứng dụng không được dùng model này cho tìm web.")
+
+        limits = await threaded(store.limits, app_id, "web_search")
+        warnings = await enforce_limits(app_id, limits, "web_search")
+        primary = await threaded(store.pool_accounts, pol["pool_id"]) if pol["pool_id"] else []
+        fallback = await threaded(store.pool_accounts, pol["fallback_pool_id"]) if pol["fallback_pool_id"] else []
+        strategy = (primary[0]["strategy"] if primary else None) or "least_used"
+        cands = order([a for a in primary if a["provider"] == "claude"], strategy, (app_id, "sp")) + \
+            order([a for a in fallback if a["provider"] == "claude" and a["id"] not in {x["id"] for x in primary}], "least_used", (app_id, "sf"))
+        request_id = "req_" + secrets.token_hex(6)
+        payload = {"query": query.strip(), "max_results": n, "include_domains": include, "exclude_domains": exclude}
+
+        def build(res, tin, tout):
+            # Không tin runner tuyệt đối: kiểm tra lại URL, độ dài, bộ lọc tên miền trước khi trả cho ứng dụng.
+            return {"results": reclean(res.get("results"), n, include, exclude)}
+        state.app_inflight[app_id] += 1
+        try:
+            return await dispatch(ident, request_id, "web_search", "claude", model, payload, cands, warnings, t0, build)
+        finally:
+            state.app_inflight[app_id] = max(0, state.app_inflight[app_id] - 1)
 
     # ------------------------------------------------------------------ GET /v1/models
     @app.get("/v1/models")

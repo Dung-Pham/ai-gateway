@@ -25,7 +25,7 @@ Cờ cứng hóa từng CLI (đã kiểm chứng ở KET_QUA_THAM_DO, đã mã h
 ## Bằng chứng
 
 ### Test tự động (CLI/runner GIẢ, định dạng đầu ra lấy từ mẫu thật)
-- `runner`: 54 test. `gateway`: 87 test. `egress-proxy`: 43 test. **Tổng 184**. Chạy lại: `scripts/test_all.sh` (kèm kiểm tra hợp đồng dữ liệu và `pip-audit`: không có lỗ hổng đã biết trong 20 gói đã khóa phiên bản).
+- `runner`: 105 test. `gateway`: 137 test. `egress-proxy`: 43 test. **Tổng 285**. Chạy lại: `scripts/test_all.sh` (kèm kiểm tra hợp đồng dữ liệu và `pip-audit`: không có lỗ hổng đã biết trong 20 gói đã khóa phiên bản).
 - Đã bao phủ: xác thực khóa (thiếu/sai/thu hồi/hết hạn/ứng dụng bị ngưng), vector băm khớp PHP thật, chính sách và model, hạn mức cứng/mềm, định tuyến và dự phòng, cooldown, hết phiên, ngắt mạch, chống SSRF ở URL runner và proxy, không ghi nội dung vào log/CSDL, dọn thư mục tạm kể cả khi lỗi, ghi ngược token, ghim SHA-256, gateway chỉ ghi `usage_events` và `app_keys.last_used_at`.
 
 ### Tích hợp trên máy dev (CLI thật, Compose thật, proxy thật)
@@ -58,13 +58,40 @@ Cờ cứng hóa từng CLI (đã kiểm chứng ở KET_QUA_THAM_DO, đã mã h
 | Chỉ công cụ `WebSearch` | **Chạy được**: trả 2 tài liệu thật (tiêu đề, URL, nội dung). Tìm kiếm thực hiện phía Anthropic, **runner không cần ra internet** |
 | `WebSearch` + `WebFetch` | **Hỏng**: `WebFetch` tải trang **từ chính máy runner** (`vinmec.com`, `pharmacity.vn`…), bị chặn, mô hình trả `[]` |
 
-Hệ quả cho thiết kế khả năng `web_search` (chưa dựng):
-1. **Mức "tìm nhẹ"** (khuyến nghị làm trước): runner Claude chỉ bật `WebSearch`, dùng chung allowlist hiện tại, **không cần mở internet**. Chưa đánh giá chất lượng nội dung so với `WebFetch` (đoạn trích có thể ngắn hơn).
-2. **Mức "tìm đầy đủ"** (cần `WebFetch`): runner **riêng** cho khả năng này, đặt sau một proxy "web công khai": cho phép mọi tên miền công khai trên cổng 80/443 nhưng **chặn mọi địa chỉ nội bộ** sau khi phân giải (bộ lọc này đã có trong `egress-proxy/`, chỉ cần thêm chế độ không allowlist tên miền), ghi log tên miền, giới hạn tốc độ. Dùng tài khoản riêng, không chia sẻ token với runner văn bản, và coi mọi nội dung trang là **dữ liệu không tin cậy**.
-3. **Cảnh báo về cầu nối hiện tại:** `claude_bridge.py` đang cho Claude dùng `WebFetch` **ngay trên server chính, không có bộ lọc địa chỉ nội bộ nào**. Tôi **chưa kiểm tra** `WebFetch` có tự chặn địa chỉ riêng/metadata không. Nếu không, một trang web độc hại có thể khiến nó tải URL nội bộ. Nên kiểm tra sớm.
+Hệ quả: **mức "tìm nhẹ" đã được dựng** (xem mục dưới). Mức "tìm đầy đủ" với `WebFetch` **chưa dựng**: nếu cần, phải là runner **riêng** sau một proxy "web công khai" (cho mọi tên miền công khai cổng 80/443, chặn mọi địa chỉ nội bộ sau khi phân giải; bộ lọc đã có sẵn trong `egress-proxy/`, chỉ cần thêm chế độ không allowlist tên miền), dùng tài khoản riêng, và coi mọi nội dung trang là dữ liệu không tin cậy.
+
+**Cảnh báo về cầu nối hiện tại:** `claude_bridge.py` đang cho Claude dùng `WebFetch` **ngay trên server chính, không có bộ lọc địa chỉ nội bộ nào**. Tôi **chưa kiểm tra** `WebFetch` có tự chặn địa chỉ riêng/metadata không. Nếu không, một trang web độc hại có thể khiến nó tải URL nội bộ. Nên kiểm tra sớm.
+
+## Khả năng `web_search` mức nhẹ (đã dựng, 19/11/2026)
+
+`POST /v1/search`, **tương thích cầu nối cũ**: nhận `{query, max_results (1–8), include_domains, exclude_domains}`, trả `{"results":[{title,url,content}]}`; lỗi theo định dạng của gateway (`429` kèm `Retry-After`, `502`, `504`).
+
+| Lớp bảo vệ | Cách làm |
+|---|---|
+| Chỉ một công cụ | Claude chạy với `--tools WebSearch --allowedTools WebSearch --max-turns 6` cùng toàn bộ cờ cứng hóa của đường văn bản. **Không bao giờ có `WebFetch`** |
+| Ngắt mạch | Nếu sự kiện khởi tạo của CLI cho thấy bất kỳ công cụ nào ngoài `WebSearch`, hoặc có máy chủ MCP: `policy_violation`, runner ngắt mạch cho mọi khả năng |
+| Không cần ra internet | Tìm kiếm thực hiện phía hãng; proxy chỉ thấy `api.anthropic.com` (đã đo) |
+| Làm sạch kết quả (runner **và** gateway, hai lần độc lập) | Chỉ `http(s)`, cổng 80/443, bỏ thông tin đăng nhập trong URL, bỏ IP trần, `localhost` và tên nội bộ (`.local`, `.internal`…), bỏ ký tự điều khiển và ký tự đảo chiều/ẩn, khử trùng URL, giới hạn độ dài và tối đa 8 kết quả |
+| Bộ lọc tên miền xác định | `include_domains` / `exclude_domains` được áp dụng bằng mã, **không tin việc mô hình tự lọc** (đã thử thật: `include_domains=["vinmec.com"]` cho 4/4 kết quả thuộc vinmec.com) |
+| Dữ liệu web là dữ liệu | Lời nhắc hệ thống yêu cầu coi kết quả tìm kiếm là dữ liệu; kể cả bị lừa, mô hình chỉ có `WebSearch` (không đọc tệp, không chạy lệnh, không tải trang) |
+| Riêng tư | Nội dung truy vấn không vào log, không vào `usage_events` (có test) |
+| Hạn mức riêng | Cửa sổ yêu cầu mỗi phút và hạn mức đơn vị ngày/tháng tính **riêng** cho `web_search`; hạn mức chung (`capability_code` rỗng) cộng mọi khả năng |
+
+Hai lỗi thiết kế được phát hiện và sửa khi viết test cho khả năng này: bộ đếm yêu cầu mỗi phút trước đó dùng chung cho mọi khả năng, và hạn mức ngày/tháng của riêng một khả năng trước đó cộng cả khả năng khác.
+
+**Đo thật** (Claude thật qua Compose, một truy vấn tiếng Việt, nên chỉ là mẫu nhỏ, không phải đánh giá thống kê):
+
+| | Số kết quả | Độ dài đoạn trích | Thời gian |
+|---|---|---|---|
+| Gateway, mức nhẹ (chỉ `WebSearch`) | 4 | 291 đến 365 ký tự | khoảng 22 giây |
+| Cầu nối cũ (có `WebFetch`) | 3 | 107 đến 204 ký tự | khoảng 29 giây |
+
+Lưu ý chất lượng: tiêu đề đôi khi là siêu dữ liệu thô của trang (ví dụ "backup og meta"), vì mức nhẹ lấy từ kết quả tìm kiếm chứ không đọc trang. Chưa so sánh độ chính xác của nội dung.
+
+**Chuyển SEO Studio sang gateway (chưa làm):** (1) đăng ký ứng dụng trong giao diện điều khiển, cấp cả `text` và `web_search`, tạo khóa; (2) trỏ nhà cung cấp "claude_bridge" sang địa chỉ gateway với khóa mới (đường `/v1/search` giữ nguyên); (3) tên model: gateway nhận `claude:sonnet`, còn dạng không tiền tố (`sonnet`) chỉ được chấp nhận khi pool của ứng dụng chỉ có một hãng, nên nên cho SEO Studio một pool chỉ có Claude; (4) thêm địa chỉ gateway vào `AI_PRIVATE_BASE_URL_ALLOWLIST`; (5) chạy song song với cầu nối cũ một thời gian trước khi tắt.
 
 ## Giới hạn đã biết (nói thẳng)
-1. **Chỉ văn bản.** Chưa có stream, ảnh vào/ra, tìm web (gateway trả `stream_not_supported` / `capability_not_supported`). **SEO Studio chưa thể chuyển sang gateway cho tới khi có `web_search`**, vì nó đang dùng `/v1/search` của cầu nối.
+1. **Chỉ văn bản và tìm web mức nhẹ.** Chưa có stream, ảnh vào/ra, tìm web đầy đủ (`WebFetch`). Gateway trả `stream_not_supported` / `capability_not_supported` cho phần chưa có.
 2. **Một tiến trình gateway**; cooldown, tài khoản hết phiên, bộ đếm rpm nằm trong bộ nhớ, mất khi khởi động lại. Muốn mở rộng phải chuyển sang Redis.
 3. **Chưa có kiểm tra sức khỏe định kỳ, cảnh báo, và nút "Kiểm tra ngay" của giao diện chưa nối vào gateway.** `/internal/state` đã có nhưng control/ chưa đọc.
 4. **Chưa thử với PostgreSQL**, chỉ SQLite (gói `psycopg` đã khóa nhưng chưa chạy thật).
@@ -76,7 +103,7 @@ Hệ quả cho thiết kế khả năng `web_search` (chưa dựng):
 
 ## Chạy lại
 ```bash
-scripts/test_all.sh                      # 184 test + hợp đồng + pip-audit
+scripts/test_all.sh                      # 285 test + hợp đồng + pip-audit
 cp deploy/.env.example deploy/.env       # điền, rồi:
 python3 scripts/gwctl.py init ./secrets --pepper-file <tệp chứa APP_KEY của control/>
 python3 scripts/gwctl.py new-runner ./secrets claude claude-01   # lặp cho từng tài khoản

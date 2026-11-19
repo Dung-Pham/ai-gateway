@@ -30,9 +30,37 @@ def refresh(path):
     if has("@@REFRESH") and os.path.isfile(path):
         open(path, "w").write('{"token":"NEW-TOKEN-AFTER-REFRESH"}')
 
+def search_rows():
+    good = [{"title": "Huyết áp thấp là gì", "url": "https://www.vinmec.com/vi/bai-viet/a", "content": "Huyết áp thấp là dưới 90/60 mmHg. " * 6},
+            {"title": "Triệu chứng", "url": "https://suckhoedoisong.vn/b", "content": "Chóng mặt, mệt mỏi."}]
+    if has("@@EMPTY"): return []
+    if has("@@MANY"): return [{"title": f"T{i}", "url": f"https://site{i}.example.org/p", "content": "c"} for i in range(12)]
+    if has("@@DUP"): return [{"title": "A", "url": "https://Example.org/x/", "content": "1"}, {"title": "B", "url": "https://example.org/x", "content": "2"}] + good
+    if has("@@DOM"): return [{"title": "n1", "url": "https://www.nhs.uk/a", "content": "1"}, {"title": "n2", "url": "https://vinmec.com/b", "content": "2"}, {"title": "n3", "url": "https://sub.cdc.gov/c", "content": "3"}]
+    if has("@@CTRL"): return [{"title": "Tiêu\u202eđề\x00 lạ\n\n  nhiều   dòng", "url": "https://ok.example.org/p", "content": "nội\x07dung\u200b  ẩn"}]
+    if has("@@BADURLS"):
+        return [{"title": "x", "url": u, "content": "bad"} for u in ("javascript:alert(1)", "file:///etc/passwd", "http://169.254.169.254/latest/meta-data/", "http://user:pw@evil.example.org/x",
+                "http://localhost/admin", "http://10.0.0.1/", "http://[::1]/", "https://good.example.org:8443/x", "ftp://x.example.org/a", "//evil.example.org/x", "https://intranet/x",
+                "https://host.internal/x", "https://has space.example.org/x", "", "https://" + "a" * 2100 + ".example.org/x")] + [good[0]]
+    return good
+
+
 if prov == "claude":
     cfg = os.environ.get("CLAUDE_CONFIG_DIR", "")
     refresh(os.path.join(cfg, ".credentials.json"))
+    tools_arg = argv[argv.index("--tools") + 1]
+    if tools_arg == "WebSearch":
+        tl = ["WebSearch"] + (["WebFetch"] if has("@@FETCH") else [])
+        print(json.dumps({"type": "system", "subtype": "init", "tools": tl, "mcp_servers": [], "model": "claude-haiku-5-5"}))
+        print(json.dumps({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "unifiedWindows": {"five_hour": {"utilization": 0.1, "resetsAt": 1795088400}}}}))
+        if has("@@LIMIT"):
+            print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": "You've hit your usage limit · resets 5pm", "usage": {}, "modelUsage": {}}))
+        else:
+            body = "Kết quả:\n```json\n" + json.dumps(search_rows(), ensure_ascii=False) + "\n```" if not has("@@NOJSON") else "Xin lỗi, không tìm được."
+            print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": body, "total_cost_usd": 0.002,
+                              "usage": {"input_tokens": 10, "output_tokens": 300, "cache_read_input_tokens": 100, "cache_creation_input_tokens": 50},
+                              "modelUsage": {"claude-haiku-5-5": {}}}))
+        sys.exit(0)
     tools = ["mcp__claude_ai_Claude_Docs__guide"] if has("@@TOOLS") else []
     print(json.dumps({"type": "system", "subtype": "init", "tools": tools, "mcp_servers": [{"name": "claude.ai Claude Docs"}] if tools else [], "model": "claude-haiku-5-5"}))
     print(json.dumps({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "unifiedWindows": {"five_hour": {"utilization": 0.39, "resetsAt": 1795088400}, "seven_day": {"utilization": 0.44, "resetsAt": 1795276800}}}}))
