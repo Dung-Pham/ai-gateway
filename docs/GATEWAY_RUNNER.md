@@ -130,8 +130,8 @@ Phát hiện vận hành: systemd người dùng **không thực thi** `IPAddres
 ## Giới hạn đã biết (nói thẳng)
 1. **Chỉ văn bản và tìm web mức nhẹ.** Chưa có stream, ảnh vào/ra, tìm web đầy đủ (`WebFetch`). Gateway trả `stream_not_supported` / `capability_not_supported` cho phần chưa có.
 2. **Một tiến trình gateway**; cooldown, tài khoản hết phiên, bộ đếm rpm nằm trong bộ nhớ, mất khi khởi động lại. Muốn mở rộng phải chuyển sang Redis.
-3. **Chưa có kiểm tra sức khỏe định kỳ, cảnh báo, và nút "Kiểm tra ngay" của giao diện chưa nối vào gateway.** `/internal/state` đã có nhưng control/ chưa đọc.
-4. **Chưa thử với PostgreSQL**, chỉ SQLite (gói `psycopg` đã khóa nhưng chưa chạy thật).
+3. **Giao diện đã nối gateway (19/11 tối):** lệnh `gateway:sync` mỗi 30 giây chép slot, nghỉ, hết phiên và % hạn mức vào bảng `accounts`; nút "Kiểm tra ngay" gọi `POST /internal/accounts/{label}/check`; cảnh báo hết phiên, ngắt mạch, mất kết nối. **Vẫn chưa có kiểm tra sức khỏe định kỳ chủ động** (chỉ khi bấm hoặc khi có lượt gọi thật). Xem `docs/BAN_GIAO_TRIEN_KHAI.md` cho bộ triển khai.
+4. **PostgreSQL đã chạy thật trong bản diễn tập 19/11** (migrate bằng Laravel, gateway đọc/ghi, sao lưu/khôi phục); chưa chạy với tải hoặc nhiều ngày.
 5. **Việc làm mới token** (ghi ngược vào volume) chỉ được test bằng CLI giả; chưa thấy CLI thật làm mới token trong lúc thử.
 6. Prompt của agy đi qua đối số dòng lệnh (giới hạn 100.000 byte, thấy được bằng `ps` trong container).
 7. Tài khoản thử: Claude là **tài khoản đang code** của bạn; agy dùng token của tài khoản Google AI Pro **cá nhân** của bạn. Bản sao token nằm ở `~/.probe/smoke/` (quyền 0600). Cần dọn khi xong.

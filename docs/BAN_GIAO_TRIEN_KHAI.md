@@ -121,25 +121,25 @@ scripts/aigw create-admin ten@congty.example   # hỏi mật khẩu tại chỗ 
 Vào `APP_URL`, đăng nhập, **bật 2FA** (Menu người dùng → Hồ sơ của tôi). Với `REQUIRE_2FA=true` hệ thống sẽ bắt buộc.
 
 ### 3.6 👤 Đăng nhập tài khoản AI (người sở hữu làm; web KHÔNG nhận mật khẩu/token)
-Phiên đăng nhập là một **tệp token** nằm ở `/opt/aigw/secrets/<nhãn>/auth/<đường dẫn>`. Cách an toàn nhất: đăng nhập trên **máy của chính bạn** (có trình duyệt) vào một thư mục tạm, rồi chép tệp token sang máy AI. Mỗi tài khoản dùng thư mục tạm riêng, **không** dùng thư mục cấu hình thường ngày của CLI.
-
-| Hãng | Lệnh đăng nhập (trên máy của bạn) | Tệp token cần chép sang `.../<nhãn>/auth/` |
-|---|---|---|
-| Claude | `CLAUDE_CONFIG_DIR=$HOME/.aigw-login/claude-01 claude auth login` | `.credentials.json` |
-| Grok | `GROK_HOME=$HOME/.aigw-login/grok-01 grok login --device-code` | `auth.json` |
-| Antigravity | `HOME=$HOME/.aigw-login/agy-01 agy` rồi đăng nhập Google trong giao diện CLI | `.gemini/antigravity-cli/antigravity-oauth-token` (giữ nguyên cấu trúc thư mục) |
-
+Phiên đăng nhập là một **tệp token** trong `/opt/aigw/secrets/<nhãn>/auth/`. Lệnh sau chạy CLI **trong một container sạch** (không keychain, không D-Bus, quyền tối thiểu) và chỉ chép tệp token vào đúng thư mục auth của runner:
 ```bash
-# trên máy bạn, ví dụ Claude:
-scp $HOME/.aigw-login/claude-01/.credentials.json aigw@<máy-AI>:/opt/aigw/secrets/claude-01/auth/
-# trên máy AI:
-sudo chown 10001:10001 /opt/aigw/secrets/claude-01/auth/.credentials.json && chmod 600 /opt/aigw/secrets/claude-01/auth/.credentials.json
+scripts/aigw login claude claude-01      # hoặc: grok grok-01 | agy agy-01
 ```
-Xong **xóa thư mục `.aigw-login/...` trên máy của bạn**. Quy tắc: không dán mã xác thực hay token vào chat/ticket/email; không đăng nhập tài khoản chính của bạn vào Cổng AI nếu có tài khoản riêng.
-Lưu ý đã biết: Grok ghi token hết hạn sau 7 ngày theo tài liệu của CLI, **chưa biết có tự làm mới không**; Claude/agy chưa theo dõi lâu dài. Khi hết phiên giao diện hiện "Hết phiên" và cảnh báo; làm lại bước này rồi bấm "Kiểm tra ngay".
+Người sở hữu tài khoản **SSH vào máy AI có terminal** (`ssh -t`), chạy lệnh, mở đường dẫn CLI in ra **trên trình duyệt của chính mình**, đăng nhập (có 2FA), rồi dán mã vào terminal. CLI báo xong thì lệnh in `ĐÃ LƯU token`. Với `agy`: chọn "Google OAuth", đăng nhập xong thoát CLI (Ctrl+C hoặc `/quit`) để token được ghi.
+
+| Hãng | Tệp token (trong `auth/`) | Ghi chú |
+|---|---|---|
+| Claude | `.credentials.json` | Lệnh bên trong: `claude auth login` |
+| Grok | `auth.json` | `grok login --device-code`; tài liệu CLI ghi token hết hạn sau 7 ngày, **chưa biết có tự làm mới không** |
+| Antigravity | `.gemini/antigravity-cli/antigravity-oauth-token` | Dùng **tài khoản Google riêng cho Cổng AI** (đường dẫn đăng nhập xin nhiều phạm vi quyền) |
+
+**Đừng đăng nhập CLI ngay trên máy cá nhân rồi chép token sang.** Đã quan sát: `agy` trên máy có keychain dùng keychain chung của người dùng hệ điều hành (không tách theo `HOME`), nên có thể lấy nhầm tài khoản cá nhân và không tạo tệp token. Quy tắc chung: không dán mã xác thực hay token vào chat/ticket/email; dùng tài khoản riêng cho Cổng AI, tách khỏi tài khoản lập trình hằng ngày.
+
+**Mức kiểm chứng của `aigw login`:** đường ống (tạo container, chạy CLI, chép token, quyền tệp 0600) **đã chạy thử với CLI giả**. **Chưa chạy với đăng nhập thật** của cả ba hãng trong container này (lúc thăm dò, agy đã đăng nhập được trong container sạch bằng cách dán mã; Claude/Grok đã đăng nhập bằng thư mục cấu hình riêng). Nếu CLI nào không cho đăng nhập kiểu này, báo lại để xử lý, đừng tìm đường vòng.
+Khi hết phiên giao diện hiện "Hết phiên" và cảnh báo; chạy lại lệnh trên rồi bấm "Kiểm tra ngay".
 
 ### 3.7 🔧 Thêm tài khoản vào giao diện và kiểm tra
-Giao diện → **Tài khoản AI → Thêm**: nhãn `claude-01`, hãng, gói, số lượt song song (khởi đầu 2), địa chỉ runner `http://runner-claude-01:8800`. Tài khoản mới ở trạng thái "Chờ đăng nhập". Mở trang tài khoản → **Kiểm tra ngay**: gateway gọi một lượt rất nhỏ qua runner; đạt thì chuyển "Sẵn sàng" và hiện % hạn mức (Claude). Rồi: **Nhóm tài khoản (pool)** → tạo pool, thêm tài khoản; **Ứng dụng → Thêm** (xem mục 4).
+Giao diện → **Tài khoản AI → Thêm**: nhãn `claude-01`, hãng, gói, số lượt song song (khởi đầu 2), địa chỉ runner `http://runner-claude-01:8800`. Tài khoản mới ở trạng thái "Chờ đăng nhập". Mở trang tài khoản → **Kiểm tra ngay**: gateway gọi một lượt rất nhỏ qua runner; đạt thì chuyển "Sẵn sàng" và hiện % hạn mức (Claude). Rồi: **Định tuyến** → tạo pool (nhóm tài khoản) và thêm tài khoản; **Ứng dụng → Thêm** (xem mục 4).
 
 ## 4. Nối SEO Studio (và ứng dụng khác)
 
@@ -172,7 +172,7 @@ Docker **bỏ qua ufw/firewalld** cho các cổng đã công bố; luật phải
 | Khởi động lại một dịch vụ | `scripts/aigw restart gateway` |
 | Dừng toàn bộ (giữ dữ liệu) | `scripts/aigw down` |
 | Lệnh artisan | `scripts/aigw artisan gateway:sync` |
-| Tài khoản hết phiên | Làm lại 3.6, rồi **Kiểm tra ngay** |
+| Tài khoản hết phiên | `scripts/aigw login <hãng> <nhãn>` (3.6), rồi **Kiểm tra ngay** |
 | Tắt khẩn cấp | Giao diện → Hệ thống → Dừng khẩn cấp (từng ứng dụng/tài khoản/toàn bộ) |
 | Thêm tài khoản AI mới | 3.4 → 3.6 → 3.7, rồi `scripts/aigw up` |
 | Đổi khóa API của một ứng dụng | Giao diện → Ứng dụng → tạo khóa mới → cập nhật ứng dụng → thu hồi khóa cũ |
@@ -238,7 +238,7 @@ Phần còn lại của kiểm chứng cách ly máy AI: `docs/CACH_LY_MAY_CHU.m
 | "Gateway mất kết nối" | `gateway` chết hoặc `admin_token` lệch | `scripts/aigw logs gateway`; không đổi `admin_token` khi hệ thống đang chạy |
 | Gọi API trả `no_account_available` | Tài khoản "Chờ đăng nhập"/"Hết phiên"/"Đang nghỉ", hoặc pool rỗng | Bấm "Kiểm tra ngay"; xem pool của ứng dụng |
 | Gọi API trả `invalid_api_key` | Khóa sai, đã thu hồi, hoặc `app_key` đã bị đổi | Tạo khóa mới; nếu `app_key` mất, mọi khóa cũ vô hiệu |
-| Hết phiên liên tục | Token CLI hết hạn | Làm lại 3.6 |
+| Hết phiên liên tục | Token CLI hết hạn | `scripts/aigw login ...` (3.6) |
 | `web` báo không chạy được `caddy` | Bỏ `cap_add: NET_BIND_SERVICE` | Giữ nguyên cấu hình trong `docker-compose.yml` |
 
 ## 11. Bản đồ tệp
@@ -247,7 +247,7 @@ Phần còn lại của kiểm chứng cách ly máy AI: `docs/CACH_LY_MAY_CHU.m
 | `deploy/docker-compose.yml` | Bộ dịch vụ; `deploy/runners.d/*.yml` các runner; `deploy/.env` cấu hình (không commit) |
 | `deploy/egress-allowlist.txt` | Tên miền runner được nối ra |
 | `deploy/firewall/`, `deploy/systemd/` | Mẫu tường lửa, lịch sao lưu |
-| `scripts/aigw` | Lệnh vận hành (`up`, `health`, `logs`, `create-admin`, `artisan`) |
+| `scripts/aigw` | Lệnh vận hành (`up`, `health`, `logs`, `login`, `create-admin`, `artisan`) |
 | `scripts/gwctl.py` | Tạo bí mật và runner |
 | `scripts/preflight.sh`, `backup.sh`, `restore.sh` | Kiểm tra máy, sao lưu, khôi phục |
 | `control/` | Giao diện quản trị (Laravel/Filament); `gateway/`, `runner/`, `egress-proxy/` |
