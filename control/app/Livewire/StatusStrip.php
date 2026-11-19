@@ -25,6 +25,7 @@ class StatusStrip extends Component
             'apps' => ClientApp::where('status', AppStatus::Active->value)->count(),
             'openAlerts' => Alert::open()->count(),
             'demo' => (bool) config('gateway.demo'),
+            'sync' => \Illuminate\Support\Facades\Cache::get(\App\Services\Gateway\AccountSync::CACHE_KEY),
         ]);
     }
 }

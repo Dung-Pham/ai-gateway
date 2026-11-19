@@ -24,10 +24,12 @@ class ViewAccount extends ViewRecord
             Actions\EditAction::make()->label('Sửa')->icon('heroicon-m-pencil-square'),
             Actions\Action::make('check')->label('Kiểm tra ngay')->icon('heroicon-m-arrow-path')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
                 ->requiresConfirmation()->modalHeading('Kiểm tra phiên đăng nhập?')
-                ->modalDescription('Gateway sẽ gọi thử một lượt rất nhẹ. Lượt này tính vào hạn mức của tài khoản. (Khung dựng: chưa có gateway thật nên chỉ ghi nhận thao tác.)')
+                ->modalDescription('Gateway sẽ gọi thử một lượt rất nhỏ qua runner của tài khoản này. Lượt này tính vào hạn mức của tài khoản nhưng không tính cho ứng dụng nào.')
                 ->action(function () {
-                    Audit::log('account.check', $this->record->label, ['ghi chú' => 'khung dựng, chưa gọi gateway']);
-                    Notification::make()->title('Đã ghi nhận yêu cầu kiểm tra')->body('Khung dựng chưa nối với gateway thật.')->warning()->send();
+                    $res = app(\App\Services\Gateway\AccountSync::class)->applyCheck($this->record, app(\App\Services\Gateway\GatewayClient::class)->check($this->record->label));
+                    Audit::log('account.check', $this->record->label, ['kết quả' => $res['ok'] ? 'đạt' : 'không đạt']);
+                    Notification::make()->title($res['ok'] ? "{$this->record->label}: đạt" : "{$this->record->label}: không đạt")->body($res['message'])->{$res['ok'] ? 'success' : 'danger'}()->send();
+                    $this->redirect(AccountResource::getUrl('view', ['record' => $this->record]));
                 }),
             Actions\Action::make('pause')->label('Tạm dừng')->icon('heroicon-m-pause')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
                 ->visible(fn () => in_array($this->record->status, [AccountStatus::Active, AccountStatus::Draining]))

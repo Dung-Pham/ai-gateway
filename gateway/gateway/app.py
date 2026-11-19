@@ -347,7 +347,8 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
         now = clock.epoch()
         labels = set(state.inflight) | set(state.cooldown_until) | set(state.flags) | set(state.last_error) | set(state.quota)
         return {"accounts": {l: {"inflight": state.inflight.get(l, 0), "cooldown_s": max(0, int(state.cooldown_until.get(l, 0) - now)),
-                                 "flag": state.flags.get(l), "last_error": state.last_error.get(l), "quota": state.quota.get(l)} for l in sorted(labels)},
+                                 "flag": state.flags.get(l), "last_error": state.last_error.get(l), "quota": state.quota.get(l),
+                                 "checked_at": state.checked_at.get(l)} for l in sorted(labels | set(state.checked_at))},
                 "counters": dict(state.counters)}
 
     @app.post("/internal/accounts/{label}/reset")
@@ -355,6 +356,41 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
         admin_only(request)
         state.flags.pop(label, None); state.cooldown_until.pop(label, None); state.last_error.pop(label, None)
         return {"ok": True}
+
+    @app.post("/internal/accounts/{label}/check")
+    async def check_account(label: str, request: Request):
+        """"Kiểm tra ngay": một lượt gọi rất nhỏ qua runner của tài khoản. Thành công thì gỡ cờ hết phiên/ngắt mạch; thất bại thì đặt cờ tương ứng."""
+        admin_only(request)
+        acc = await threaded(store.account_by_label, label)
+        if not acc:
+            raise ApiError(404, "account_not_found", "Không có tài khoản này.")
+        secret = settings.runner_secrets.get(label)
+        if not secret:
+            return {"ok": False, "error_class": "no_runner_secret", "message": "Chưa khai báo bí mật runner cho tài khoản này."}
+        url = validate_runner_url(acc["runner_url"], settings.runner_host_regex, settings.allow_runner_port_min)
+        model = settings.check_models.get(acc["provider"], "haiku")
+        t1 = time.monotonic()
+        _code, res = await runner.run(RunnerRef(label, url, secret), {"request_id": "chk_" + secrets.token_hex(6), "capability": "text", "model": model,
+                                                                       "system": "Trả lời đúng một từ.", "user": "ok"})
+        lat = int((time.monotonic() - t1) * 1000)
+        if res.get("ok"):
+            state.flags.pop(label, None); state.last_error.pop(label, None)
+            if res.get("quota"):
+                state.quota[label] = res["quota"]
+            state.checked_at[label] = clock.epoch()
+            state.inc("account_checks_ok_total")
+            return {"ok": True, "latency_ms": lat, "quota": res.get("quota") or {}}
+        cls = res.get("error_class", "upstream_error")
+        state.last_error[label] = cls
+        if cls == "auth_expired":
+            state.flags[label] = "auth_expired"
+        elif cls == "rate_limited":
+            state.set_cooldown(label, _resume_at(res, clock.epoch(), settings.default_cooldown_s))
+        elif cls in ("tripped", "policy_violation"):
+            state.flags[label] = "tripped"
+        state.checked_at[label] = clock.epoch()
+        state.inc(f"account_checks_failed_total{{class=\"{cls}\"}}")
+        return {"ok": False, "error_class": cls, "latency_ms": lat, "message": str(res.get("message", ""))[:200]}
 
     @app.get("/metrics")
     async def metrics(request: Request):

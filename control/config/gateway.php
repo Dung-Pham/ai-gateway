@@ -12,4 +12,13 @@ return [
 
     // Bắt buộc mọi người dùng bật 2FA (TOTP) mới dùng được giao diện. Mặc định tắt cho dev; BẬT ở production.
     'require_2fa' => (bool) env('REQUIRE_2FA', false),
+
+    // Nối với gateway (tiến trình FastAPI). Giao diện chỉ gọi các đường /internal/* bằng mã quản trị; không bao giờ đi qua mạng công cộng.
+    'url' => rtrim((string) env('GATEWAY_URL', 'http://gateway:8000'), '/'),
+    // Mã quản trị: ưu tiên tệp (Docker secret), nếu không có thì đọc biến GATEWAY_ADMIN_TOKEN.
+    'admin_token_file' => env('GATEWAY_ADMIN_TOKEN_FILE'),
+    'admin_token' => env('GATEWAY_ADMIN_TOKEN'),
+    'timeout' => (int) env('GATEWAY_TIMEOUT', 5),
+    // "Kiểm tra ngay" gọi một lượt thật qua runner nên có thể chậm hơn.
+    'check_timeout' => (int) env('GATEWAY_CHECK_TIMEOUT', 90),
 ];

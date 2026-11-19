@@ -16,6 +16,7 @@ class Settings:
     runner_host_regex: str = r"^runner-[a-z0-9]+(-[a-z0-9]+)*$"   # SSRF: chỉ gọi tên máy runner nội bộ
     allow_runner_port_min: int = 1024
     search_model: str = "haiku"           # model mặc định cho /v1/search (việc nhẹ: dùng model nhỏ để dành hạn mức)
+    check_models: dict = field(default_factory=lambda: {"claude": "haiku", "grok": "grok-4.7", "agy": "gemini-4-neon-high"})   # model rẻ nhất để "Kiểm tra ngay"
 
     @staticmethod
     def from_env(env=os.environ) -> "Settings":
@@ -37,4 +38,16 @@ class Settings:
         if not url:
             raise SystemExit("Thiếu DATABASE_URL.")
         return Settings(database_url=url, key_pepper=pepper, runner_secrets=secrets, admin_token=read("GATEWAY_ADMIN_TOKEN_FILE", False),
-                        timezone=env.get("APP_TIMEZONE", "Asia/Ho_Chi_Minh"), search_model=env.get("GATEWAY_SEARCH_MODEL", "haiku"))
+                        timezone=env.get("APP_TIMEZONE", "Asia/Ho_Chi_Minh"), search_model=env.get("GATEWAY_SEARCH_MODEL", "haiku"),
+                        check_models=_check_models(env.get("GATEWAY_CHECK_MODELS")))
+
+
+def _check_models(raw):
+    """GATEWAY_CHECK_MODELS="claude=haiku,grok=...,agy=..." ghi đè mặc định."""
+    out = {"claude": "haiku", "grok": "grok-4.7", "agy": "gemini-4-neon-high"}
+    for part in (raw or "").split(","):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            if k.strip() in out and v.strip():
+                out[k.strip()] = v.strip()
+    return out

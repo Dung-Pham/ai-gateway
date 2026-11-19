@@ -249,3 +249,40 @@ def test_trang_thai_noi_bo_cong_bo_quota_va_reset(env):
 
 def test_healthz_cong_khai(env):
     assert env.client.get("/healthz").json()["ok"] is True
+
+
+# ---------------------------------------------------------------- "Kiểm tra ngay"
+def test_kiem_tra_ngay_can_token_va_tai_khoan_ton_tai(env):
+    from conftest import ADMIN
+    assert env.client.post("/internal/accounts/claude-01/check").status_code == 401
+    assert env.client.post("/internal/accounts/khong-co/check", headers={"X-Admin-Token": ADMIN}).status_code == 404
+
+
+def test_kiem_tra_ngay_thanh_cong_go_co_het_phien_va_dung_model_re(env):
+    from conftest import ADMIN
+    h = {"X-Admin-Token": ADMIN}
+    env.runner.script["claude-01"] = [env.runner.fail("auth_expired")]
+    env.post(); env.post()
+    assert env.client.get("/internal/state", headers=h).json()["accounts"]["claude-01"]["flag"] == "auth_expired"
+    env.runner.calls.clear()
+    r = env.client.post("/internal/accounts/claude-01/check", headers=h).json()
+    assert r["ok"] is True and r["quota"]["five_hour"]["utilization"] == 0.39
+    label, _url, _sec, payload = env.runner.calls[0]
+    assert label == "claude-01" and payload["model"] == "haiku" and payload["capability"] == "text"
+    st = env.client.get("/internal/state", headers=h).json()["accounts"]["claude-01"]
+    assert st["flag"] is None and st["checked_at"] is not None
+    assert not any(p["request_id"].startswith("chk_") for _, _, _, p in env.runner.calls[1:])
+
+
+def test_kiem_tra_ngay_that_bai_dat_co_va_khong_ghi_usage(env):
+    from conftest import ADMIN
+    h = {"X-Admin-Token": ADMIN}
+    before = len(env.events())
+    env.runner.script["claude-02"] = [env.runner.fail("auth_expired")]
+    r = env.client.post("/internal/accounts/claude-02/check", headers=h).json()
+    assert r["ok"] is False and r["error_class"] == "auth_expired"
+    assert env.client.get("/internal/state", headers=h).json()["accounts"]["claude-02"]["flag"] == "auth_expired"
+    assert len(env.events()) == before
+    env.runner.script["grok-01"] = [env.runner.fail("rate_limited", quota={"five_hour": {"utilization": 1, "resets_at": 4_000_000_000}})]
+    assert env.client.post("/internal/accounts/grok-01/check", headers=h).json()["error_class"] == "rate_limited"
+    assert env.client.get("/internal/state", headers=h).json()["accounts"]["grok-01"]["cooldown_s"] > 0

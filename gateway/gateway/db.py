@@ -101,6 +101,14 @@ class Store:
         with self.engine.connect() as c:
             return [dict(r) for r in c.execute(q).mappings()]
 
+    def account_by_label(self, label: str):
+        a, pr = self.t["accounts"], self.t["providers"]
+        q = (select(a.c.id, a.c.label, a.c.status, a.c.max_concurrency, a.c.runner_url, pr.c.code.label("provider"))
+             .join(pr, pr.c.id == a.c.provider_id).where(a.c.label == label))
+        with self.engine.connect() as c:
+            r = c.execute(q).mappings().first()
+            return dict(r) if r else None
+
     # ---- ghi nhận sử dụng (chỉ INSERT)
     def insert_event(self, **v):
         with self.engine.begin() as c:

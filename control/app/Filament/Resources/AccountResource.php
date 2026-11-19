@@ -104,6 +104,7 @@ class AccountResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make()->label('Xem'),
                 Tables\Actions\EditAction::make()->label('Sửa'),
+                self::checkAction(),
                 self::pauseAction(),
                 self::resumeAction(),
             ])
@@ -112,6 +113,20 @@ class AccountResource extends Resource
             ->poll('30s')
             ->emptyStateHeading('Chưa có tài khoản AI nào')
             ->emptyStateDescription('Thêm tài khoản bằng script của người vận hành (xem hướng dẫn trong runbook), sau đó bấm "Kiểm tra ngay".');
+    }
+
+    /** "Kiểm tra ngay": gateway gọi một lượt rất nhỏ qua runner của tài khoản. Dùng ở bảng và trang chi tiết. */
+    public static function checkAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('check')->label('Kiểm tra ngay')->icon('heroicon-m-arrow-path')->color('gray')
+            ->authorize(fn () => Perm::can('accounts.manage'))
+            ->requiresConfirmation()->modalHeading(fn (Account $r) => "Kiểm tra {$r->label}?")
+            ->modalDescription('Gateway sẽ gọi thử một lượt rất nhỏ qua runner của tài khoản này. Lượt này tính vào hạn mức của tài khoản nhưng không tính cho ứng dụng nào.')
+            ->action(function (Account $r) {
+                $res = app(\App\Services\Gateway\AccountSync::class)->applyCheck($r, app(\App\Services\Gateway\GatewayClient::class)->check($r->label));
+                Audit::log('account.check', $r->label, ['kết quả' => $res['ok'] ? 'đạt' : 'không đạt']);
+                Notification::make()->title($res['ok'] ? "{$r->label}: đạt" : "{$r->label}: không đạt")->body($res['message'])->{$res['ok'] ? 'success' : 'danger'}()->send();
+            });
     }
 
     public static function pauseAction(): Tables\Actions\Action
