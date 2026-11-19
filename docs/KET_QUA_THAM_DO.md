@@ -11,7 +11,7 @@ Cập nhật: 19/11/2026, trên máy thử của bạn (Linux, 8 nhân, RAM 15 G
 | P0 / G0 môi trường, phiên bản | **Đã chạy** |
 | P10 / G10 chưa đăng nhập trông thế nào | **Đã chạy** (cả 4 CLI) |
 | P9 / G9 tên miền | **Chạy một phần**: chỉ ở trạng thái chưa đăng nhập |
-| P1–P8, G1–G8, G11 | **Chưa chạy: bị chặn tích hợp** (cần đăng nhập tài khoản thử) |
+| P1–P8, G1–G8, G11 | **Chưa chạy: bị chặn tích hợp** (cần đăng nhập tài khoản thử). Gemini đã thử đăng nhập 3 lần, **chưa thành công** (xem mục "Gemini: đăng nhập" bên dưới); Claude và Grok chưa thử |
 | P3 (chạm giới hạn) | **Chưa chạy**: cần đăng nhập và dùng thật |
 | P11 (LiteLLM) | **Chưa chạy** (làm sau) |
 
@@ -89,3 +89,24 @@ HOME="$HOME/.probe/gemini-home" gemini
 Khi xong, tôi chạy tiếp P1 đến P8, G1 đến G8, G11 và P9/G9 lần hai. Ước tính khoảng 30 lượt gọi nhỏ trên mỗi tài khoản (Claude, Gemini, Grok).
 
 Mục chủ động chạm giới hạn (P3) **không** nằm trong đợt này; chỉ làm nếu bạn đồng ý riêng.
+
+
+## Gemini: đăng nhập kiểu không có trình duyệt (19/11/2026, bản 0.64.0)
+
+Mục tiêu: đăng nhập tài khoản Google (gói đăng ký, không dùng khóa API) vào thư mục thử bằng `NO_BROWSER=true`. **Kết quả: chưa thành công sau 3 lần thử.** Phần dưới chỉ ghi điều đã quan sát và điều đọc được trong mã của CLI; **nguyên nhân gốc chưa xác định**.
+
+Đã quan sát (cả 3 lần giống nhau):
+- Với `NO_BROWSER=true`, CLI in đường dẫn đăng nhập Google rất dài và chờ mã. Đường dẫn dễ bị **cụt khi sao chép từ Terminal** (mất `&response_type=code`), gây lỗi `400 invalid_request`.
+- Sau khi dán mã đúng, `google_accounts.json` được ghi (bước Google có vẻ thành công), nhưng **không có tệp token nào được tạo**: không có `oauth_creds.json`, không có `gemini-credentials.json`.
+- Cùng thời điểm đó `settings.json` bị ghi `security.auth.selectedType = "gemini-api-key"`, nên CLI khởi động lại và **đòi khóa API**, dù ta chọn đăng nhập Google.
+- Gọi không tương tác (`gemini -p …`) sau đó thoát mã 41: "Manual authorization is required but the current session is non-interactive". Thử cả có và không có `GEMINI_FORCE_FILE_STORAGE`.
+- Mỗi tiến trình sinh mã PKCE riêng, nên **mã lấy từ đường dẫn của tab này không dùng được ở tab khác**. Từng có tới 8 tiến trình `gemini` chạy chồng nhau, có thể ghi đè cấu hình của nhau (đã dọn trước lần 3).
+
+Đọc từ mã nguồn của CLI (bundle 0.64.0, chưa kiểm chứng bằng chạy):
+- Token đăng nhập Google lưu qua `HybridTokenStorage`, dịch vụ `gemini-cli-oauth`, khóa cố định **`main-account`**. Ở chế độ keychain, đó là **một danh tính duy nhất cho cả người dùng hệ điều hành**, đổi `HOME` không tách được. Không dùng được cho nhiều tài khoản.
+- `GEMINI_FORCE_FILE_STORAGE=true` ép dùng tệp `~/.gemini/gemini-credentials.json`. Tệp này được "mã hóa" bằng khóa suy ra từ **tên máy và tên người dùng** (không phải bí mật thật): coi như tệp token thường, bảo vệ bằng quyền `0600` và volume riêng.
+- `GEMINI_CLI_HOME` đổi thư mục gốc của CLI, một lựa chọn thay cho đổi `HOME`.
+
+Rủi ro cần kiểm tra: lần thử đầu (chưa bật chế độ tệp) có thể đã ghi vào keychain của hệ điều hành trên máy bạn, dùng chung với Gemini CLI thật của bạn (nếu bạn dùng). Tôi không xem keychain (sẽ lộ token). Bạn nên kiểm tra Gemini CLI thật còn đúng tài khoản không.
+
+Hệ quả: **Gemini bị chặn tích hợp** trong đợt này. Đường tiếp theo (chưa làm, cần bạn chọn): (a) thử lại trên bản mới hơn (0.69.0 có sẵn) cài vào thư mục riêng, không đụng bản đang dùng; (b) dùng khóa API Gemini (tính tiền theo lượt, không phải gói đăng ký); (c) tạm bỏ Gemini khỏi phạm vi, làm Claude và Grok trước.
