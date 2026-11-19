@@ -194,3 +194,12 @@ Với Claude, mỗi lượt có thể trả phần trăm mức dùng thật củ
 
 ## Còn chưa chạy
 Grok: G4 (ảnh vào), G6 (song song), G10 chỉ chạy lúc chưa đăng nhập; Claude và Grok: P3 (chạm giới hạn, cần bạn đồng ý riêng); `agy` (AG0–AG6, chưa đăng nhập); Codex (bạn không có tài khoản); P11 (LiteLLM).
+
+
+## Đã áp dụng: vá cầu nối Claude trên dịch vụ đang chạy (19/11/2026, 18:05)
+
+- Repo addp-autoseo: nhánh `fix/m09/ag-s27/dev2/bridge-khoa-connector`, commit `1bc868a` (chưa push, chưa PR): thêm `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` vào `run_claude` và `run_search`, kèm `tests/Unit/ClaudeBridgeHardeningTest.php`.
+- Triển khai: chép tệp đã commit (sha `ba504a3b`) vào `~/.local/share/claude-bridge/claude_bridge.py` rồi `systemctl --user restart claude-bridge.service`. Trước đó không có yêu cầu nào đang chạy (0 tiến trình con, 0 kết nối). Bản cũ (sha `ce5953ad`) được sao lưu cạnh đó: `claude_bridge.py.bak-20261119-pre-strict-mcp`.
+- Kiểm chứng sau triển khai, qua HTTP thật: không khóa trả 401; có khóa liệt kê `opus, sonnet, haiku`; câu bẫy gọi công cụ Claude Docs trả `KHONGCO` thay vì để mô hình phát lệnh gọi; `/v1/search` hoạt động.
+- Về `/v1/search` trả 0 kết quả ở một lượt: so sánh cơ chế trên 3 lượt mỗi bên cho thấy mô hình dùng WebSearch và WebFetch giống hệt nhau, số công cụ lúc khởi tạo giảm từ 10 xuống 2 (bỏ 8 công cụ Docs, giữ đúng 2 công cụ web), số kết quả 1/1/1 (cũ) và 1/1/2 (mới). Trong tổng thể các lượt đo, bản mới có hai lượt 0 kết quả còn bản cũ không có lượt nào; mẫu quá nhỏ để kết luận có liên quan hay không, và không có cơ chế nào giải thích được. **Cần theo dõi tỉ lệ 0 kết quả của `/v1/search` trong vài ngày**; nếu tăng rõ rệt thì quay lại bản cũ.
+- Đường lui: `cp ~/.local/share/claude-bridge/claude_bridge.py.bak-20261119-pre-strict-mcp ~/.local/share/claude-bridge/claude_bridge.py && systemctl --user restart claude-bridge.service`.
