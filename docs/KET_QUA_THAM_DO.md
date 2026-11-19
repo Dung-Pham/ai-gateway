@@ -4,7 +4,7 @@ Cập nhật: 19/11/2026, trên máy thử của bạn (Linux, 8 nhân, RAM 15 G
 
 ## Tình trạng tổng quát
 
-**Mới chạy được phần không cần đăng nhập.** Chưa có tài khoản thử nào đăng nhập vào thư mục thử `~/.probe/…` (đăng nhập do bạn làm, tôi không xử lý). Nên **chưa có lượt gọi AI nào được thực hiện** và chưa dùng hạn mức của tài khoản nào. Môi trường không có khóa API (đã kiểm tra: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`… đều trống) nên CLI không thể âm thầm dùng tài khoản khác.
+**Đã chạy phần không cần đăng nhập, và phần có đăng nhập cho Claude và Grok** (xem mục "Đợt 2" ở cuối). Gemini CLI không đăng nhập được; Antigravity (`agy`) chưa đăng nhập. Chưa có tài khoản thử nào đăng nhập vào thư mục thử `~/.probe/…` (đăng nhập do bạn làm, tôi không xử lý). Nên **chưa có lượt gọi AI nào được thực hiện** và chưa dùng hạn mức của tài khoản nào. Môi trường không có khóa API (đã kiểm tra: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`… đều trống) nên CLI không thể âm thầm dùng tài khoản khác.
 
 | Mục | Trạng thái |
 |---|---|
@@ -132,3 +132,65 @@ Hệ quả thiết kế:
 - `agy` là tệp thực thi khoảng 280 MB, tự cập nhật qua một dịch vụ của Google (`releaseBaseUrl`): trong runner phải **tắt tự cập nhật và ghim phiên bản**, cần thêm tên miền của dịch vụ cập nhật vào phân tích tên miền.
 - Chưa biết `agy` đăng nhập thế nào trên máy không có trình duyệt, token lưu ở đâu, có dùng được nhiều tài khoản trên một máy không. Cần thăm dò (xem mục Antigravity trong THAM_DO_CLI).
 - **Không dùng bản `agy` và thư mục `~/.gemini` thật của bạn cho thăm dò** (đó là đăng nhập và hội thoại cá nhân của bạn). Thăm dò dùng `HOME` riêng như các CLI khác.
+
+
+---
+
+# Đợt 2: Claude và Grok đã đăng nhập (19/11/2026)
+
+Tài khoản: **Claude trong thư mục thử là cùng một tài khoản claude.ai với đăng nhập mặc định của bạn** (đã kiểm tra, chỉ so sánh trùng/khác); bạn đã cho phép dùng. Các số phần trăm hạn mức dưới đây là của tài khoản dùng chung với việc code. Grok đăng nhập qua grok.com, model mặc định `grok-4.7`. Tổng cộng khoảng 20 lượt gọi nhỏ.
+
+## Tóm tắt các giả định
+
+| Giả định | Claude | Grok |
+|---|---|---|
+| **G1** JSON có số token | **Đạt**: `usage` (vào, ra, cache), `total_cost_usd`, `modelUsage` | **Đạt**: `usage` (vào, ra, cache, suy luận), `total_cost_usd`; thêm `grok usage <phiên>` |
+| **G2** đọc % hạn mức bằng máy | **Đạt**: sự kiện `rate_limit_event` trong `stream-json` có `unifiedWindows.five_hour.utilization` và `seven_day.utilization` kèm `resetsAt` | **Chưa thấy**: luồng sự kiện không có thông tin hạn mức; chưa thử lệnh tương tác |
+| **G4** ảnh vào không cần công cụ đọc tệp | **Đạt**: ảnh base64 trong đầu vào `stream-json`, trả lời đúng "Đỏ" | Chưa chạy (`--prompt-json` chưa thử) |
+| **G5** sinh ảnh qua CLI | **Không**: nói thẳng không có công cụ tạo ảnh, chỉ đưa mã SVG dạng chữ | Không (hết lượt trước khi trả về ảnh; chưa kết luận chắc) |
+| **G6** song song cùng thư mục cấu hình | **Đạt (ngắn)**: 3 lượt song song đều thành công, đăng nhập còn nguyên. Chưa chứng minh an toàn dài hạn | Chưa chạy |
+| **G7** quyền thật bị khóa | **Có điều kiện**: xem "Phát hiện bảo mật" | **Có điều kiện**: xem "Phát hiện bảo mật" |
+| **G11** nội dung lưu ra đĩa | **Không lưu** khi dùng `--no-session-persistence` (đã tìm chuỗi dấu hiệu độc nhất trong cả thư mục cấu hình) | **CÓ lưu** nội dung hội thoại (`chat_history.jsonl`, `updates.jsonl`, `prompt_history.jsonl`), không có cờ tắt |
+| **P8** tài nguyên một lượt nhỏ | khoảng 5,6 giây, RAM đỉnh khoảng 267 MB | khoảng 6,5 giây, RAM đỉnh khoảng 142 MB |
+
+Ghi chú về chi phí nền: một lượt "trả lời một từ" của Grok tốn khoảng 14.000 token (phần lớn là lời nhắc hệ thống và định nghĩa công cụ); của Claude khoảng 3.800 token (phần lớn tạo cache). Đơn vị quy đổi trong gateway phải tính cả phần nền này.
+
+## PHÁT HIỆN BẢO MẬT (ảnh hưởng thiết kế)
+
+### 1. Claude: connector của tài khoản claude.ai vẫn được nạp dù tắt công cụ
+- Với `--tools "" --setting-sources ""`, sự kiện khởi tạo vẫn liệt kê **8 công cụ `mcp__claude_ai_Claude_Docs__*`** và máy chủ MCP "claude.ai Claude Docs" ở trạng thái đã kết nối (nạp bất đồng bộ nên có lần init báo 0 công cụ nhưng mô hình vẫn thấy).
+- Khi bẫy bằng lời nhắc yêu cầu gọi công cụ chỉ đọc `guide`, mô hình **thật sự phát lệnh gọi** công cụ. Chỉ có hệ thống xin quyền chặn lại ("chưa được cấp quyền"). **Rào chắn duy nhất là xin quyền**, không phải việc tắt công cụ. Nếu có cấu hình cho phép (cờ `--allowedTools`, quy tắc cho phép trong cài đặt, chế độ bỏ qua quyền), lời nhắc độc hại có thể xóa hoặc xuất tài liệu trên tài khoản thật.
+- **Cách chặn đã kiểm chứng:** thêm `--strict-mcp-config --mcp-config '{"mcpServers":{}}'`: 0 công cụ, không có MCP, mô hình trả lời "không có công cụ". Lệnh cần dùng: `claude -p --tools "" --setting-sources "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --no-session-persistence`.
+- Khuyến nghị bổ sung: tài khoản Claude của gateway nên **không gắn connector nào** (làm ở phía tài khoản), và tuyệt đối không dùng `--dangerously-skip-permissions` hay `--allowedTools`.
+- **Cầu nối `scripts/claude_bridge.py` hiện có của SEO Studio chưa có `--strict-mcp-config`**, nên có thể dính đúng lỗ hổng này với bất kỳ tài khoản nào có connector. Chưa sửa vì nằm ngoài repo này; cần bạn quyết.
+
+### 2. Grok: `--tools ""` và `--sandbox` không đủ để tắt công cụ
+- Mô hình luôn thấy **24 công cụ** (kể cả `read_file`, `run_terminal_command`, `search_replace`) ở mọi chế độ (`--tools ""`, `--sandbox read-only`, `--sandbox strict`, mặc định); tệp định nghĩa công cụ giống hệt nhau.
+- **`read_file` đã đọc được tệp mồi nằm NGOÀI thư mục làm việc** ở chế độ mặc định, `--tools ""` và `--sandbox read-only`, và trả nội dung cho mô hình. Chỉ `--sandbox strict` chặn ("Permission denied").
+- `run_terminal_command` bị hủy ở mọi chế độ vì chế độ không tương tác không có ai duyệt, không phải do cờ.
+- **Đính chính:** ở bản tóm tắt đầu tiên của tôi, mục "đọc được tệp mồi" ra KHÔNG cho ba chế độ. Đó là **âm tính giả** do tôi chỉ kiểm tra đầu ra cuối mà mô hình đã dừng sớm; nhật ký phiên cho thấy việc đọc đã xảy ra.
+- **Cách chặn đã kiểm chứng:** `--disallowed-tools` với **đủ 24 tên công cụ** (danh sách lưu ở `probe-results/…/grok-disallow-list.txt`): mô hình thấy 0 công cụ, gọi 0 lần, trả lời đúng "KHONG_CO_CONG_CU", kể cả khi kết hợp `--sandbox strict`. Gỡ thiếu thì lỗi (`search_replace` đòi có `read_file`).
+- **Mong manh:** danh sách phải liệt kê đủ tên, mà bản Grok mới có thể thêm công cụ. Cần **test tự động sau mỗi lần nâng phiên bản**: chạy lượt thử và khẳng định số công cụ mô hình thấy bằng 0.
+
+### 3. Grok lưu nội dung hội thoại ra đĩa, không có cờ tắt
+`chat_history.jsonl`, `updates.jsonl` và `prompt_history.jsonl` chứa nguyên câu hỏi, tổ chức theo thư mục làm việc: `sessions/<thư mục làm việc mã hóa>/<mã phiên>/`. Hệ quả: mỗi yêu cầu phải có **thư mục làm việc riêng** và **xóa đúng thư mục phiên đó** ngay sau khi xong, và quét dọn định kỳ. Chưa kiểm tra `session_search.sqlite` và `logs/unified.jsonl` có chứa nội dung không.
+
+### 4. Đầu ra mô hình có thể chứa "giả lệnh gọi công cụ"
+Với công cụ tắt, một lượt Claude vẫn in ra văn bản dạng `<invoke name="Read">…` (không phải lời gọi thật). Gateway và ứng dụng phía sau phải coi mọi đầu ra là **văn bản thuần**, không bao giờ diễn giải thành lệnh.
+
+## Tên miền khi đã đăng nhập (một lượt gọi nhỏ)
+
+| CLI | Tên miền | Ghi chú |
+|---|---|---|
+| Claude | `api.anthropic.com:443` (bắt buộc) | |
+| Claude | `http-intake.logs.us5.datadoghq.com:443` | Gửi nhật ký/đo đạc; nên chặn nếu CLI vẫn chạy (chưa thử) |
+| Claude | `mcp-proxy.anthropic.com:443` | Chỉ cho connector; với `--strict-mcp-config` lẽ ra không cần (chưa chạy lại để xác nhận) |
+| Grok | `cli-chat-proxy.grok.com:443` (bắt buộc) | Chỉ tên miền này thấy được; Grok **có** tôn trọng biến proxy |
+
+Tên miền đăng nhập và làm mới token chưa thu được vì đã đăng nhập từ trước. Danh sách này **chưa đủ làm danh sách cho phép chính thức**.
+
+## Phát hiện cho thiết kế đo lường
+Với Claude, mỗi lượt có thể trả phần trăm mức dùng thật của cả hai cửa sổ ngay trong luồng `stream-json`, nên lớp đo L2 (đọc % thật) **khả thi cho Claude** mà không cần lượt gọi riêng. Với Grok chỉ có token và chi phí (L1). Con số của Claude nằm trong một sự kiện không có tài liệu chính thức; cần test hợp đồng để phát hiện khi CLI đổi định dạng.
+
+## Còn chưa chạy
+Grok: G4 (ảnh vào), G6 (song song), G10 chỉ chạy lúc chưa đăng nhập; Claude và Grok: P3 (chạm giới hạn, cần bạn đồng ý riêng); `agy` (AG0–AG6, chưa đăng nhập); Codex (bạn không có tài khoản); P11 (LiteLLM).
