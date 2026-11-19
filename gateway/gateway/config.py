@@ -34,9 +34,9 @@ class Settings:
         secrets = json.loads(read("GATEWAY_RUNNER_SECRETS_FILE"))
         if not isinstance(secrets, dict) or any(len(str(v)) < 32 for v in secrets.values()):
             raise SystemExit("GATEWAY_RUNNER_SECRETS_FILE: cần JSON {nhãn: bí mật >= 32 ký tự}.")
-        url = env.get("DATABASE_URL")
+        url = env.get("DATABASE_URL") or read("DATABASE_URL_FILE", False)
         if not url:
-            raise SystemExit("Thiếu DATABASE_URL.")
+            raise SystemExit("Thiếu DATABASE_URL (hoặc DATABASE_URL_FILE).")
         return Settings(database_url=url, key_pepper=pepper, runner_secrets=secrets, admin_token=read("GATEWAY_ADMIN_TOKEN_FILE", False),
                         timezone=env.get("APP_TIMEZONE", "Asia/Ho_Chi_Minh"), search_model=env.get("GATEWAY_SEARCH_MODEL", "haiku"),
                         check_models=_check_models(env.get("GATEWAY_CHECK_MODELS")))

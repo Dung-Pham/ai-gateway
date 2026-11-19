@@ -1,6 +1,12 @@
-# Cổng AI: gateway + runner (mỗi tài khoản AI một runner) + proxy chặn đường ra.
-# Mạng: ai_internal KHÔNG có đường ra internet; chỉ egress-proxy (có allowlist tên miền) nối được ra ngoài.
-# Xem docs/CACH_LY_MAY_CHU.md. Thêm tài khoản: python3 scripts/gwctl.py new-runner <hãng> <nhãn>
+# CỔNG AI — một máy (VM) chạy trọn bộ: PostgreSQL, giao diện điều khiển, gateway, proxy ra ngoài và các runner (mỗi tài khoản AI một runner).
+# Runner KHÔNG nằm trong tệp này: mỗi runner là một đoạn deploy/runners.d/<nhãn>.yml do `scripts/gwctl.py new-runner` sinh ra.
+# Luôn chạy qua `scripts/aigw` (tự ghép các đoạn runner). Xem docs/BAN_GIAO_TRIEN_KHAI.md.
+#
+# Mạng:
+#   back        (internal)  chỉ nội bộ: db, control, scheduler, gateway, migrate — KHÔNG có đường ra internet
+#   ai_internal (internal)  gateway <-> runner <-> egress-proxy — KHÔNG có đường ra internet
+#   egress                  chỉ egress-proxy gắn vào (allowlist tên miền)
+#   edge                    chỉ web (Caddy): công bố giao diện và API ra máy chủ. gateway KHÔNG ở đây
 
 name: ai-gateway
 
@@ -9,30 +15,117 @@ x-hardening: &hardening
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
   restart: unless-stopped
+  logging: {driver: json-file, options: {max-size: "20m", max-file: "5"}}
 
-x-runner: &runner
-  <<: *hardening
-  image: ai-gateway-runner:0.1.0
-  user: "${RUNNER_UID:-10001}:${RUNNER_GID:-10001}"
-  pids_limit: 256
-  mem_limit: 1g
-  cpus: 2
-  tmpfs: ["/tmp:rw,size=256m,mode=1777"]
-  networks: [ai_internal]
-  depends_on: [egress-proxy]
-
-x-runner-env: &runner-env
-  HTTPS_PROXY: http://egress-proxy:3128
-  HTTP_PROXY: http://egress-proxy:3128
-  NO_PROXY: localhost,127.0.0.1
-  RUNNER_AUTH_DIR: /auth
-  RUNNER_WORK_ROOT: /tmp/runner
-  RUNNER_SECRET_FILE: /run/secrets/runner_secret
+x-control-env: &control-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
+  APP_LOCALE: vi
+  APP_FALLBACK_LOCALE: vi
+  DB_CONNECTION: pgsql
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_DATABASE: aigw
+  DB_USERNAME: gateway
+  SESSION_DRIVER: database
+  CACHE_STORE: file
+  QUEUE_CONNECTION: sync
+  LOG_CHANNEL: stderr
+  GATEWAY_DEMO: "false"
+  GATEWAY_URL: http://gateway:8000
+  ADMIN_ALLOWED_CIDRS: ${ADMIN_ALLOWED_CIDRS:-}
+  REQUIRE_2FA: ${REQUIRE_2FA:-true}
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
 
 services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # entrypoint của postgres cần để chuyển sang người dùng postgres
+    environment: {POSTGRES_USER: gateway, POSTGRES_DB: aigw, POSTGRES_PASSWORD_FILE: /run/secrets/db_password}
+    secrets: [db_password]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [back]
+    logging: {driver: json-file, options: {max-size: "20m", max-file: "5"}}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d aigw"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Việc chạy một lần mỗi lần triển khai: cập nhật cấu trúc CSDL rồi nạp dữ liệu tham chiếu (idempotent).
+  migrate:
+    image: ai-gateway-control:${AIGW_VERSION:-0.2.0}
+    build: {context: ../control, target: app}
+    user: "${AIGW_UID:-10001}:${AIGW_GID:-10001}"   # phải đọc được bí mật: trùng chủ sở hữu thư mục SECRETS_DIR (xem .env.example)
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,size=64m,mode=1777"]
+    environment: *control-env
+    secrets: [app_key, db_password, admin_token]
+    command: ["sh", "-c", "php artisan migrate --force && php artisan gateway:seed-baseline"]
+    networks: [back]
+    depends_on: {db: {condition: service_healthy}}
+
+  control:
+    <<: *hardening
+    image: ai-gateway-control:${AIGW_VERSION:-0.2.0}
+    user: "${AIGW_UID:-10001}:${AIGW_GID:-10001}"   # phải đọc được bí mật: trùng chủ sở hữu thư mục SECRETS_DIR (xem .env.example)
+    mem_limit: 512m
+    pids_limit: 256
+    tmpfs: ["/tmp:rw,size=64m,mode=1777"]
+    environment: *control-env
+    secrets: [app_key, db_password, admin_token]
+    volumes: [control_storage:/app/storage]
+    networks: [back]
+    depends_on: {migrate: {condition: service_completed_successfully}}
+
+  scheduler:
+    <<: *hardening
+    image: ai-gateway-control:${AIGW_VERSION:-0.2.0}
+    user: "${AIGW_UID:-10001}:${AIGW_GID:-10001}"   # phải đọc được bí mật: trùng chủ sở hữu thư mục SECRETS_DIR (xem .env.example)
+    mem_limit: 256m
+    pids_limit: 128
+    tmpfs: ["/tmp:rw,size=64m,mode=1777"]
+    environment: *control-env
+    secrets: [app_key, db_password, admin_token]
+    volumes: [control_storage:/app/storage]
+    command: ["php", "artisan", "schedule:work"]
+    networks: [back]
+    depends_on: {migrate: {condition: service_completed_successfully}}
+
+  web:
+    <<: *hardening
+    image: ai-gateway-web:${AIGW_VERSION:-0.2.0}
+    build: {context: ../control, target: web}
+    user: "10001:10001"
+    cap_add: [NET_BIND_SERVICE]   # tệp caddy mang capability này; thiếu thì không chạy được khi đã cap_drop ALL
+    mem_limit: 128m
+    pids_limit: 128
+    command: ["caddy", "run", "--config", "/etc/caddy/${WEB_MODE:-http}.Caddyfile"]
+    tmpfs: ["/tmp:rw,size=16m,mode=1777", "/config:rw,size=1m", "/data:rw,size=1m"]
+    volumes: ["${WEB_CERT_DIR:-./certs}:/certs:ro"]
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:${WEB_INNER_PORT:-8080}"    # giao diện quản trị
+      - "${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-8771}:8771"              # API cho ứng dụng (chỉ /v1/* và /healthz)
+    networks: [edge, back]
+    depends_on: [control]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--no-check-certificate", "http://127.0.0.1:8080/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   egress-proxy:
     <<: *hardening
-    image: ai-gateway-egress:0.1.0
+    image: ai-gateway-egress:${AIGW_VERSION:-0.2.0}
+    build: {context: ../egress-proxy}
     user: "10001:10001"
     pids_limit: 256
     mem_limit: 128m
@@ -42,76 +135,43 @@ services:
 
   gateway:
     <<: *hardening
-    image: ai-gateway-gateway:0.1.0
-    user: "${GATEWAY_UID:-10001}:${GATEWAY_GID:-10001}"
+    image: ai-gateway-gateway:${AIGW_VERSION:-0.2.0}
+    build: {context: ../gateway}
+    user: "${AIGW_UID:-10001}:${AIGW_GID:-10001}"   # phải đọc được bí mật: trùng chủ sở hữu thư mục SECRETS_DIR (xem .env.example)
     pids_limit: 256
     mem_limit: 512m
     tmpfs: ["/tmp:rw,size=64m,mode=1777"]
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL_FILE: /run/secrets/database_url
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
-      GATEWAY_PEPPER_FILE: /run/secrets/pepper
+      GATEWAY_PEPPER_FILE: /run/secrets/app_key
       GATEWAY_RUNNER_SECRETS_FILE: /run/secrets/runner_secrets
       GATEWAY_ADMIN_TOKEN_FILE: /run/secrets/admin_token
-    secrets: [pepper, runner_secrets, admin_token]
-    ports: ["${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-8771}:8000"]
-    networks: [ai_internal, edge]
-    depends_on: [egress-proxy]
+      GATEWAY_CHECK_MODELS: ${GATEWAY_CHECK_MODELS:-}
+    secrets: [app_key, database_url, runner_secrets, admin_token]
+    networks: [back, ai_internal]   # KHÔNG ở mạng edge: gateway không có đường ra internet; Caddy (web) là cửa duy nhất vào
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      egress-proxy: {condition: service_started}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 3
 
-  # ---- Runner mẫu: mỗi tài khoản AI một dịch vụ. Tên dịch vụ PHẢI là runner-<nhãn> (gateway chỉ gọi tên dạng này).
-  runner-claude-01:
-    <<: *runner
-    environment:
-      <<: *runner-env
-      RUNNER_PROVIDER: claude
-      RUNNER_CLI_BIN: /opt/cli/claude
-      RUNNER_CLI_SHA256: ${CLAUDE_SHA256}
-    volumes:
-      - ${CLI_CLAUDE}:/opt/cli/claude:ro
-      - ${SECRETS_DIR}/claude-01/auth:/auth
-    secrets: [{source: runner_secret_claude_01, target: runner_secret}]
-
-  runner-grok-01:
-    <<: *runner
-    environment:
-      <<: *runner-env
-      RUNNER_PROVIDER: grok
-      RUNNER_CLI_BIN: /opt/cli/grok
-      RUNNER_CLI_SHA256: ${GROK_SHA256}
-      RUNNER_GROK_DENY_FILE: /pins/deny.txt
-    volumes:
-      - ${CLI_GROK}:/opt/cli/grok:ro
-      - ../runner/pins/grok-1.0.70.deny.txt:/pins/deny.txt:ro
-      - ${SECRETS_DIR}/grok-01/auth:/auth
-    secrets: [{source: runner_secret_grok_01, target: runner_secret}]
-
-  runner-agy-01:
-    <<: *runner
-    environment:
-      <<: *runner-env
-      RUNNER_PROVIDER: agy
-      RUNNER_CLI_BIN: /opt/cli/agy
-      RUNNER_CLI_SHA256: ${AGY_SHA256}
-      RUNNER_TIMEOUT_S: "200"
-    volumes:
-      - ${CLI_AGY}:/opt/cli/agy:ro
-      - ${SECRETS_DIR}/agy-01/auth:/auth
-    secrets: [{source: runner_secret_agy_01, target: runner_secret}]
-
 networks:
-  ai_internal: {internal: true}   # không có đường ra internet
-  edge: {}                        # gateway công bố cổng và tới được CSDL
-  egress: {}                      # chỉ egress-proxy gắn vào đây
+  back: {internal: true}
+  ai_internal: {internal: true}
+  egress: {}
+  edge: {}
+
+volumes:
+  pgdata: {}
+  control_storage: {}
 
 secrets:
-  pepper: {file: "${SECRETS_DIR}/pepper"}                    # CHÍNH XÁC APP_KEY của giao diện điều khiển
+  app_key: {file: "${SECRETS_DIR}/app_key"}                # APP_KEY của Laravel, đồng thời là "tiêu" băm khóa API ở gateway
+  db_password: {file: "${SECRETS_DIR}/db_password"}
+  database_url: {file: "${SECRETS_DIR}/database_url"}
+  admin_token: {file: "${SECRETS_DIR}/admin_token"}        # giao diện dùng để gọi /internal/* của gateway
   runner_secrets: {file: "${SECRETS_DIR}/runner_secrets.json"}
-  admin_token: {file: "${SECRETS_DIR}/admin_token"}
-  runner_secret_claude_01: {file: "${SECRETS_DIR}/claude-01/runner.secret"}
-  runner_secret_grok_01: {file: "${SECRETS_DIR}/grok-01/runner.secret"}
-  runner_secret_agy_01: {file: "${SECRETS_DIR}/agy-01/runner.secret"}

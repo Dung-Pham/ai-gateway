@@ -2,4 +2,4 @@
 
 Nguyên tắc: không ghi nội dung prompt/phản hồi ra log hay CSDL; chỉ INSERT vào usage_events và cập nhật app_keys.last_used_at.
 """
-__version__ = "0.1.0"
+__version__ = "0.2.0"

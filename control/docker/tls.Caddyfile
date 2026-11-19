@@ -1,0 +1,55 @@
+# Bản có TLS: cần tệp chứng chỉ do quản lý cấp (gắn ở /certs/fullchain.pem và /certs/privkey.pem).
+{
+	admin off
+	auto_https off
+}
+
+:8443 {
+	tls /certs/fullchain.pem /certs/privkey.pem
+	root * /srv/public
+	encode zstd gzip
+	request_body {
+		max_size 2MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	@hidden path /.* /storage/logs/* /vendor/*
+	respond @hidden 404
+	php_fastcgi control:9000 {
+		root /app/public
+	}
+	file_server
+	log {
+		output stdout
+		format json
+	}
+}
+
+# API cho các ứng dụng. CHỈ cho qua /v1/* và /healthz; /internal/* và /metrics KHÔNG bao giờ ra ngoài (chỉ giao diện gọi, trong mạng nội bộ).
+:8771 {
+	tls /certs/fullchain.pem /certs/privkey.pem
+	request_body {
+		max_size 4MB
+	}
+	@public path /v1/* /healthz
+	handle @public {
+		reverse_proxy gateway:8000 {
+			transport http {
+				response_header_timeout 340s
+			}
+		}
+	}
+	handle {
+		respond 404
+	}
+	log {
+		output stdout
+		format json
+	}
+}

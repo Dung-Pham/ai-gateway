@@ -21,3 +21,7 @@ storage/logs/
 deploy/.env
 secrets/
 *.secret
+deploy/runners.d/*.yml
+!deploy/runners.d/README.md
+deploy/certs/
+!deploy/.env.example

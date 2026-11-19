@@ -1,0 +1,56 @@
+#!/bin/sh
+# Lệnh vận hành duy nhất cho Cổng AI. Tự ghép docker-compose.yml với mọi runner trong deploy/runners.d/*.yml.
+#   aigw preflight      kiểm tra máy đã sẵn sàng chưa (chạy TRƯỚC khi khởi động lần đầu)
+#   aigw up             dựng ảnh (nếu cần) và khởi động toàn bộ
+#   aigw down           dừng (KHÔNG xóa dữ liệu)
+#   aigw ps | logs [dịch_vụ] | restart [dịch_vụ]
+#   aigw health         kiểm tra từng thành phần và in kết quả đạt/không đạt
+#   aigw create-admin <email>   tạo quản trị viên đầu tiên (hỏi mật khẩu tại chỗ)
+#   aigw artisan <lệnh>         chạy lệnh artisan trong giao diện (đã nạp bí mật)
+#   aigw <lệnh docker compose khác>
+set -eu
+HERE="$(cd "$(dirname "$0")" && pwd)"
+DEPLOY="$HERE/../deploy"
+cd "$DEPLOY"
+[ -f .env ] || { echo "Thiếu deploy/.env. Sao deploy/.env.example thành deploy/.env và điền (xem docs/BAN_GIAO_TRIEN_KHAI.md)." >&2; exit 1; }
+FILES="-f docker-compose.yml"
+if [ -d runners.d ]; then
+    for f in runners.d/*.yml; do [ -e "$f" ] && FILES="$FILES -f $f"; done
+fi
+# shellcheck disable=SC2086
+PROJ=""; [ -n "${AIGW_PROJECT:-}" ] && PROJ="-p $AIGW_PROJECT"   # chỉ dùng khi diễn tập song song với bản thật
+dc() { docker compose $PROJ --env-file .env $FILES "$@"; }
+getenv() { sed -n "s/^$1=\\(.*\\)$/\\1/p" .env | tail -1; }
+
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+    preflight) exec "$HERE/preflight.sh" ;;
+    up) dc up -d --build "$@" ;;
+    down) dc down "$@" ;;
+    ps) dc ps "$@" ;;
+    logs) dc logs --tail=200 -f "$@" ;;
+    restart) dc restart "$@" ;;
+    create-admin) dc run --rm control php artisan gateway:create-admin "$@" ;;
+    artisan) dc exec -T control aigw-entrypoint php artisan "$@" ;;
+    health)
+        ok=0; bad=0
+        chk() { if [ "$2" = "ok" ]; then echo "  [ĐẠT]     $1"; ok=$((ok+1)); else echo "  [KHÔNG]   $1 — $2"; bad=$((bad+1)); fi; }
+        for s in db control scheduler web egress-proxy gateway; do
+            st=$(dc ps --format '{{.Service}} {{.State}} {{.Health}}' "$s" 2>/dev/null | head -1)
+            case "$st" in *running*healthy*|*"running "|*running) chk "dịch vụ $s" ok ;; *) chk "dịch vụ $s" "${st:-không chạy}" ;; esac
+        done
+        for r in $(dc config --services | grep '^runner-' || true); do
+            st=$(dc ps --format '{{.State}}' "$r" 2>/dev/null | head -1); [ "$st" = "running" ] && chk "$r" ok || chk "$r" "${st:-không chạy}"
+        done
+        gp="$(getenv GATEWAY_PORT)"; gp="${gp:-8771}"; gh="$(getenv GATEWAY_BIND)"; gh="${gh:-127.0.0.1}"; [ "$gh" = "0.0.0.0" ] && gh=127.0.0.1
+        gs=http; [ "$(getenv WEB_MODE)" = "tls" ] && gs=https
+        curl -fsSk -m 5 "$gs://$gh:$gp/healthz" >/dev/null 2>&1 && chk "API /healthz qua cửa Caddy ($gh:$gp)" ok || chk "API /healthz qua cửa Caddy ($gh:$gp)" "không trả lời"
+        code=$(curl -sk -m 5 -o /dev/null -w "%{http_code}" "$gs://$gh:$gp/internal/state" 2>/dev/null); [ "$code" = "404" ] && chk "/internal/* KHÔNG lộ ra ngoài" ok || chk "/internal/* KHÔNG lộ ra ngoài" "trả mã $code (phải 404)"
+        wp="$(getenv WEB_PORT)"; wp="${wp:-8080}"
+        scheme=http; [ "$(getenv WEB_MODE)" = "tls" ] && scheme=https
+        curl -fsSk -m 5 "$scheme://127.0.0.1:$wp/up" >/dev/null 2>&1 && chk "giao diện /up (cổng $wp)" ok || chk "giao diện /up (cổng $wp)" "không trả lời"
+        dc exec -T control aigw-entrypoint php artisan gateway:sync >/dev/null 2>&1 && chk "giao diện đọc được trạng thái gateway (gateway:sync)" ok || chk "giao diện đọc được trạng thái gateway (gateway:sync)" "lỗi"
+        echo; echo "Đạt $ok, không đạt $bad."; [ "$bad" -eq 0 ] ;;
+    help|-h|--help) sed -n '2,12p' "$0" ;;
+    *) dc "$cmd" "$@" ;;
+esac

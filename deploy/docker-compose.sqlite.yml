@@ -1,4 +1,13 @@
-# CHỈ DÙNG KHI DEV: gateway đọc CSDL SQLite dùng chung với giao diện điều khiển chạy cục bộ. Production dùng PostgreSQL (DATABASE_URL).
+# CHỈ DÙNG KHI DEV: gateway đọc CSDL SQLite dùng chung với giao diện điều khiển chạy cục bộ. Production dùng PostgreSQL (docker-compose.yml).
+# Cách dùng: docker compose -f docker-compose.yml -f docker-compose.sqlite.yml -f runners.d/<nhãn>.yml up -d gateway runner-<nhãn> egress-proxy
 services:
   gateway:
+    environment:
+      DATABASE_URL_FILE: !reset null
+      DATABASE_URL: sqlite:////data/control.sqlite
     volumes: ["${GATEWAY_DB_DIR}:/data"]   # thư mục (SQLite cần ghi tệp journal cạnh CSDL)
+    user: "${GATEWAY_UID:-10001}:${GATEWAY_GID:-10001}"
+    depends_on: !override
+      egress-proxy: {condition: service_started}
+    ports: ["${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-8771}:8000"]   # dev: không có Caddy nên công bố thẳng
+    networks: !override [edge, ai_internal]
