@@ -1,0 +1,5 @@
+# Môi trường test/dev (KHÔNG dùng cho production). Dùng đúng phiên bản đã khóa để test khớp với image thật.
+FROM python:3.12-slim-bookworm
+COPY gateway/requirements.lock /tmp/requirements.lock
+RUN pip install --no-cache-dir -r /tmp/requirements.lock pytest pip-audit
+WORKDIR /w

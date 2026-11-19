@@ -2,7 +2,7 @@
 
 Đưa các gói AI đăng ký (Claude, Codex/ChatGPT, Gemini — dùng qua CLI) lên server thành **một API dùng chung** cho các ứng dụng nội bộ, kèm công cụ quản lý: nhiều tài khoản, hạn mức và lưu lượng theo từng ứng dụng, giới hạn quyền của AI.
 
-**Trạng thái (19/11/2026): có khung giao diện (`control/`) chạy với dữ liệu mẫu giả. Chưa có gateway, chưa gọi CLI AI nào.**
+**Trạng thái (19/11/2026): có khung giao diện (`control/`, dữ liệu mẫu giả) và lát cắt đầu của gateway + runner + proxy (`gateway/`, `runner/`, `egress-proxy/`, `deploy/`) đã chạy thật với Claude, Grok và agy trên máy dev. Chưa có staging, chưa có máy AI tách biệt.**
 
 | Tài liệu | Nội dung |
 |---|---|
@@ -11,6 +11,7 @@
 | [docs/KE_HOACH_BUILD.md](docs/KE_HOACH_BUILD.md) | Các giai đoạn, nghiệm thu, rủi ro |
 | [docs/THAM_DO_CLI.md](docs/THAM_DO_CLI.md) | Lệnh thăm dò CLI (Giai đoạn 0) |
 | [docs/KET_QUA_THAM_DO.md](docs/KET_QUA_THAM_DO.md) | **Kết quả thăm dò**: mới chạy phần chưa đăng nhập, chờ đăng nhập tài khoản thử |
+| [docs/GATEWAY_RUNNER.md](docs/GATEWAY_RUNNER.md) | **Gateway, runner, proxy: đã dựng gì, bằng chứng, giới hạn, và chuyện tìm web** |
 | [docs/CACH_LY_MAY_CHU.md](docs/CACH_LY_MAY_CHU.md) | Cách ly Cổng AI khỏi server chính (máy riêng, tường lửa, container) |
 | [docs/CHUAN_BI_SERVER.md](docs/CHUAN_BI_SERVER.md) | Cấu hình nằm ở đâu trong giao diện; cần chuẩn bị gì cho server |
 | [docs/KIEM_CHUNG_GIAO_DIEN.md](docs/KIEM_CHUNG_GIAO_DIEN.md) | Kết quả kiểm chứng khung giao diện: đã thấy, đã đo, chưa làm |

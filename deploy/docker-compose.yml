@@ -1,0 +1,117 @@
+# Cổng AI: gateway + runner (mỗi tài khoản AI một runner) + proxy chặn đường ra.
+# Mạng: ai_internal KHÔNG có đường ra internet; chỉ egress-proxy (có allowlist tên miền) nối được ra ngoài.
+# Xem docs/CACH_LY_MAY_CHU.md. Thêm tài khoản: python3 scripts/gwctl.py new-runner <hãng> <nhãn>
+
+name: ai-gateway
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+x-runner: &runner
+  <<: *hardening
+  image: ai-gateway-runner:0.1.0
+  user: "${RUNNER_UID:-10001}:${RUNNER_GID:-10001}"
+  pids_limit: 256
+  mem_limit: 1g
+  cpus: 2
+  tmpfs: ["/tmp:rw,size=256m,mode=1777"]
+  networks: [ai_internal]
+  depends_on: [egress-proxy]
+
+x-runner-env: &runner-env
+  HTTPS_PROXY: http://egress-proxy:3128
+  HTTP_PROXY: http://egress-proxy:3128
+  NO_PROXY: localhost,127.0.0.1
+  RUNNER_AUTH_DIR: /auth
+  RUNNER_WORK_ROOT: /tmp/runner
+  RUNNER_SECRET_FILE: /run/secrets/runner_secret
+
+services:
+  egress-proxy:
+    <<: *hardening
+    image: ai-gateway-egress:0.1.0
+    user: "10001:10001"
+    pids_limit: 256
+    mem_limit: 128m
+    environment: {EGRESS_ALLOWLIST_FILE: /etc/egress/allowlist.txt}
+    volumes: ["./egress-allowlist.txt:/etc/egress/allowlist.txt:ro"]
+    networks: [ai_internal, egress]
+
+  gateway:
+    <<: *hardening
+    image: ai-gateway-gateway:0.1.0
+    user: "${GATEWAY_UID:-10001}:${GATEWAY_GID:-10001}"
+    pids_limit: 256
+    mem_limit: 512m
+    tmpfs: ["/tmp:rw,size=64m,mode=1777"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
+      GATEWAY_PEPPER_FILE: /run/secrets/pepper
+      GATEWAY_RUNNER_SECRETS_FILE: /run/secrets/runner_secrets
+      GATEWAY_ADMIN_TOKEN_FILE: /run/secrets/admin_token
+    secrets: [pepper, runner_secrets, admin_token]
+    ports: ["${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-8771}:8000"]
+    networks: [ai_internal, edge]
+    depends_on: [egress-proxy]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ---- Runner mẫu: mỗi tài khoản AI một dịch vụ. Tên dịch vụ PHẢI là runner-<nhãn> (gateway chỉ gọi tên dạng này).
+  runner-claude-01:
+    <<: *runner
+    environment:
+      <<: *runner-env
+      RUNNER_PROVIDER: claude
+      RUNNER_CLI_BIN: /opt/cli/claude
+      RUNNER_CLI_SHA256: ${CLAUDE_SHA256}
+    volumes:
+      - ${CLI_CLAUDE}:/opt/cli/claude:ro
+      - ${SECRETS_DIR}/claude-01/auth:/auth
+    secrets: [{source: runner_secret_claude_01, target: runner_secret}]
+
+  runner-grok-01:
+    <<: *runner
+    environment:
+      <<: *runner-env
+      RUNNER_PROVIDER: grok
+      RUNNER_CLI_BIN: /opt/cli/grok
+      RUNNER_CLI_SHA256: ${GROK_SHA256}
+      RUNNER_GROK_DENY_FILE: /pins/deny.txt
+    volumes:
+      - ${CLI_GROK}:/opt/cli/grok:ro
+      - ../runner/pins/grok-1.0.70.deny.txt:/pins/deny.txt:ro
+      - ${SECRETS_DIR}/grok-01/auth:/auth
+    secrets: [{source: runner_secret_grok_01, target: runner_secret}]
+
+  runner-agy-01:
+    <<: *runner
+    environment:
+      <<: *runner-env
+      RUNNER_PROVIDER: agy
+      RUNNER_CLI_BIN: /opt/cli/agy
+      RUNNER_CLI_SHA256: ${AGY_SHA256}
+      RUNNER_TIMEOUT_S: "200"
+    volumes:
+      - ${CLI_AGY}:/opt/cli/agy:ro
+      - ${SECRETS_DIR}/agy-01/auth:/auth
+    secrets: [{source: runner_secret_agy_01, target: runner_secret}]
+
+networks:
+  ai_internal: {internal: true}   # không có đường ra internet
+  edge: {}                        # gateway công bố cổng và tới được CSDL
+  egress: {}                      # chỉ egress-proxy gắn vào đây
+
+secrets:
+  pepper: {file: "${SECRETS_DIR}/pepper"}                    # CHÍNH XÁC APP_KEY của giao diện điều khiển
+  runner_secrets: {file: "${SECRETS_DIR}/runner_secrets.json"}
+  admin_token: {file: "${SECRETS_DIR}/admin_token"}
+  runner_secret_claude_01: {file: "${SECRETS_DIR}/claude-01/runner.secret"}
+  runner_secret_grok_01: {file: "${SECRETS_DIR}/grok-01/runner.secret"}
+  runner_secret_agy_01: {file: "${SECRETS_DIR}/agy-01/runner.secret"}

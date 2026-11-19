@@ -1,0 +1,7 @@
+# Tên miền runner được phép nối ra (CONNECT host:port). Mọi thứ khác bị chặn và ghi log "TU_CHOI".
+# CHỈ thêm sau khi đã quan sát thật (docs/KET_QUA_THAM_DO.md, mục tên miền) và hiểu vì sao cần.
+api.anthropic.com:443          # Claude (bắt buộc)
+cli-chat-proxy.grok.com:443    # Grok (bắt buộc)
+# Claude còn gọi http-intake.logs.us5.datadoghq.com (đo đạc) và mcp-proxy.anthropic.com (connector): CỐ Ý không cho phép.
+daily-cloudcode-pa.googleapis.com:443   # Antigravity (agy): API mô hình (quan sát thật ở smoke test)
+www.googleapis.com:443   # Antigravity (agy): kiểm tra điều kiện qua oauth2/v2/userinfo (bắt buộc, quan sát thật)

@@ -16,3 +16,8 @@ __pycache__/
 node_modules/
 vendor/
 storage/logs/
+
+# Bí mật và cấu hình triển khai: KHÔNG BAO GIỜ commit
+deploy/.env
+secrets/
+*.secret
