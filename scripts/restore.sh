@@ -7,7 +7,7 @@ F="${1:?Dùng: restore.sh <tệp .sql.gz>}"
 printf 'Sẽ XÓA toàn bộ dữ liệu hiện tại của CSDL aigw và nạp lại từ %s. Gõ KHOI PHUC để tiếp tục: ' "$F"
 read -r a; [ "$a" = "KHOI PHUC" ] || { echo "Đã hủy."; exit 1; }
 "$HERE/aigw" stop gateway control scheduler web
-"$HERE/aigw" exec -T db psql -U gateway -d postgres -c "DROP DATABASE IF EXISTS aigw WITH (FORCE)" -c "CREATE DATABASE aigw OWNER gateway"
-gunzip -c "$F" | "$HERE/aigw" exec -T db psql -U gateway -d aigw -v ON_ERROR_STOP=1 -q
+"$HERE/aigw" exec -T db sh -c 'mariadb -uroot -p"$(cat /run/secrets/db_root_password)" -e "DROP DATABASE IF EXISTS aigw; CREATE DATABASE aigw CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL ON aigw.* TO gateway@\"%\""'
+gunzip -c "$F" | "$HERE/aigw" exec -T db sh -c 'mariadb -ugateway -p"$(cat /run/secrets/db_password)" --default-character-set=utf8mb4 aigw'
 "$HERE/aigw" up
 echo "Đã khôi phục. Chạy: scripts/aigw health"

@@ -45,7 +45,7 @@ Mục đích: biến G1–G7 trong THIET_KE mục 2 từ giả định thành s�
 
 | Việc | Cỡ |
 |---|---|
-| 1.1 Khung repo, Compose, Postgres, Redis, CI chạy test | M |
+| 1.1 Khung repo, Compose, MariaDB, Redis, CI chạy test | M |
 | 1.2 Migration theo THIET_KE mục 4 (Laravel sở hữu); vai trò DB riêng cho gateway (đọc chính sách, chỉ INSERT usage) | M |
 | 1.3 Image runner: user không đặc quyền, hệ tệp chỉ đọc, `no-new-privileges`, bỏ capabilities, giới hạn tài nguyên, CLI ghim phiên bản | M |
 | 1.4 Proxy chuyển tiếp có allowlist; mạng nội bộ không có đường ra trực tiếp | M |
@@ -105,7 +105,7 @@ Mục đích: biến G1–G7 trong THIET_KE mục 2 từ giả định thành s�
 |---|---|
 | 5.1 Bộ test bảo mật theo THIET_KE 7.4, **chạy thật trên staging**, lưu log làm bằng chứng | M |
 | 5.2 Cảnh báo (hết phiên, cooldown, vượt 80/100% hạn mức, lỗi 5xx, runner chết, kết nối bị proxy chặn) | M |
-| 5.3 Sao lưu/khôi phục Postgres và volume phiên đăng nhập (có mã hóa); **diễn tập khôi phục** | M |
+| 5.3 Sao lưu/khôi phục MariaDB và volume phiên đăng nhập (có mã hóa); **diễn tập khôi phục** | M |
 | 5.4 Runbook: thêm tài khoản, đăng nhập lại, nâng cấp CLI, xoay khóa, xử lý sự cố, dừng khẩn cấp | M |
 | 5.5 Rà soát bảo mật độc lập (code review + thử xâm nhập nội bộ trong phạm vi staging) | M |
 | 5.6 Thử tải thực tế; ghi giới hạn thật của một máy | S |

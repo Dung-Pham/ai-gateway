@@ -19,7 +19,7 @@ echo "== Tệp cấu hình"
 [ -f .env ] && ok "deploy/.env có" || bad "thiếu deploy/.env (sao từ .env.example)"
 S="$(getenv SECRETS_DIR)"; [ -n "$S" ] || S=./secrets
 case "$S" in /*) ;; *) S="./$S" ;; esac
-for f in app_key db_password database_url admin_token runner_secrets.json; do
+for f in app_key db_password db_root_password database_url admin_token runner_secrets.json; do
     [ -s "$S/$f" ] && ok "bí mật $f" || bad "thiếu $S/$f (chạy: python3 scripts/gwctl.py init $S)"
 done
 AU="$(getenv AIGW_UID)"; AU="${AU:-10001}"

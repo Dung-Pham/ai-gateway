@@ -28,7 +28,7 @@ Chạy **toàn bộ Cổng AI** (gateway, runner, proxy, cơ sở dữ liệu v�
 ┌──────────────────────────────── MÁY AI (VM/máy riêng) ────────────────────────────────┐
 │  Gateway (API) ── Runner Claude ─┐                                                    │
 │  Giao diện quản trị              ├─ mạng Docker nội bộ, không có đường ra trực tiếp  │
-│  Postgres + Redis riêng          ├─ Runner Gemini ─┐                                  │
+│  MariaDB + Redis riêng          ├─ Runner Gemini ─┐                                  │
 │                                  └─ Runner Grok ───┴─► Proxy allowlist ─► hãng AI    │
 └───────────────────────────────────────────────────────────────────────────────────────┘
         ▲
@@ -90,7 +90,7 @@ Xếp theo độ an toàn giảm dần:
 ## 5. Những việc không được làm
 
 - Không đặt Cổng AI trên cùng Docker daemon hoặc cùng mạng Docker với dịch vụ quan trọng.
-- Không dùng chung Postgres/Redis/ổ đĩa với server chính.
+- Không dùng chung MariaDB/Redis/ổ đĩa với server chính.
 - Không cho máy AI SSH ngược vào server chính, kể cả để "tiện triển khai".
 - Không mở cổng quản trị của máy AI ra internet.
 - Không để kẻ xấu có đường kiểm soát cấu hình tường lửa từ giao diện web.

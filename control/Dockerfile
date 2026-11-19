@@ -4,7 +4,7 @@ ARG PHP_VERSION=8.3
 
 FROM php:${PHP_VERSION}-cli-bookworm AS vendor
 COPY --from=ghcr.io/mlocati/php-extension-installer:2.7 /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions intl zip bcmath pdo_pgsql pdo_sqlite gd
+RUN install-php-extensions intl zip bcmath pdo_mysql pdo_sqlite gd
 COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
 WORKDIR /app
 COPY composer.json composer.lock ./
@@ -22,7 +22,7 @@ RUN npm run build
 
 FROM php:${PHP_VERSION}-fpm-bookworm AS app
 COPY --from=ghcr.io/mlocati/php-extension-installer:2.7 /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions intl zip bcmath pdo_pgsql pdo_sqlite gd opcache \
+RUN install-php-extensions intl zip bcmath pdo_mysql pdo_sqlite gd opcache \
     && rm -f /usr/local/bin/install-php-extensions \
     && apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/*
 COPY docker/php.ini /usr/local/etc/php/conf.d/zz-aigw.ini

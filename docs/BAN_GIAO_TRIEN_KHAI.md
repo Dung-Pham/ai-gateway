@@ -16,7 +16,7 @@ Mọi thứ chạy **trên MỘT máy riêng ("máy AI")** bằng Docker Compose
 | `web` (Caddy) | **Cửa duy nhất** vào máy: giao diện quản trị (cổng `WEB_PORT`) và API cho ứng dụng (cổng `GATEWAY_PORT`, chỉ `/v1/*` và `/healthz`) | Không cần |
 | `control` + `scheduler` | Giao diện quản trị (Laravel/Filament) và việc đồng bộ trạng thái mỗi 30 giây | Không |
 | `gateway` | API OpenAI-tương-thích: xác thực khóa, hạn mức, chọn tài khoản, ghi sử dụng | **Không** (chỉ mạng nội bộ) |
-| `db` | PostgreSQL 16 | Không |
+| `db` | MariaDB 10.6 (cùng phiên bản với SEO Studio) | Không |
 | `runner-<nhãn>` | **Mỗi tài khoản AI một runner**: chạy CLI trong container cứng hóa (hệ tệp chỉ đọc, bỏ mọi quyền, giới hạn RAM/CPU/tiến trình) | **Không trực tiếp** |
 | `egress-proxy` | Đường ra duy nhất của runner; chỉ cho các tên miền trong `deploy/egress-allowlist.txt` và chặn mọi IP nội bộ | Có, theo allowlist |
 
@@ -24,7 +24,7 @@ Hai điểm bảo mật cốt lõi: (1) AI/CLI bị lừa hay bị khai thác c�
 
 ## 0.1 Công nghệ và cơ sở dữ liệu (quản lý cần biết cài gì)
 
-**Trên máy AI chỉ cần cài: Docker Engine, Docker Compose v2, `python3`, `curl`, `openssl`** (xem mục 2). **Không** cần cài PHP, Node, Composer, Python thư viện hay PostgreSQL lên máy: tất cả nằm trong ảnh Docker, `scripts/aigw up` tự build và tải. Lần build đầu cần internet (xem mục 2, "Mạng ra từ máy AI").
+**Trên máy AI chỉ cần cài: Docker Engine, Docker Compose v2, `python3`, `curl`, `openssl`** (xem mục 2). **Không** cần cài PHP, Node, Composer, Python thư viện hay MariaDB lên máy: tất cả nằm trong ảnh Docker, `scripts/aigw up` tự build và tải. Lần build đầu cần internet (xem mục 2, "Mạng ra từ máy AI").
 
 | Thành phần | Công nghệ | Chạy ở đâu |
 |---|---|---|
@@ -33,14 +33,15 @@ Hai điểm bảo mật cốt lõi: (1) AI/CLI bị lừa hay bị khai thác c�
 | Gateway (API OpenAI-tương-thích) | Python 3.12, FastAPI, uvicorn, SQLAlchemy, httpx (thư viện khóa phiên bản ở `gateway/requirements.lock`) | Container `gateway` |
 | Runner (chạy CLI AI) | Python 3.12 chỉ thư viện chuẩn; CLI của hãng gắn chỉ-đọc từ `/opt/cli` | Container `runner-<nhãn>` |
 | Proxy chặn đường ra | Python 3.12 chỉ thư viện chuẩn | Container `egress-proxy` |
-| **Cơ sở dữ liệu** | **PostgreSQL 16** | Container `db`, dữ liệu ở volume Docker `pgdata` |
+| **Cơ sở dữ liệu** | **MariaDB 10.6** (utf8mb4) | Container `db`, dữ liệu ở volume Docker `dbdata` |
 
 **Cơ sở dữ liệu và SQL:**
-- Loại: **PostgreSQL 16 ở production** (đã chạy thật trong bản diễn tập). Dev trên máy cá nhân dùng SQLite.
+- Loại: **MariaDB 10.6 ở production**, giống SEO Studio (đã chạy thật trong bản diễn tập 20/11/2026). Dev trên máy cá nhân dùng SQLite. Máy AI có MariaDB **riêng**, không dùng chung với server chính.
 - **Không có tệp SQL để nạp tay.** Cấu trúc bảng nằm ở các migration Laravel (`control/database/migrations/*.php`); `scripts/aigw up` tự chạy `php artisan migrate` rồi `gateway:seed-baseline` (nạp hãng AI, khả năng, trọng số model mặc định; chạy lại nhiều lần an toàn).
-- `contracts/control_schema.sql` **không dùng để cài đặt**: đó là bản mô tả cấu trúc (dạng SQLite) để test kiểm tra gateway và giao diện luôn khớp bảng. Đừng nạp nó vào PostgreSQL.
+- `contracts/control_schema.sql` **không dùng để cài đặt**: đó là bản mô tả cấu trúc (dạng SQLite) để test kiểm tra gateway và giao diện luôn khớp bảng. Đừng nạp nó vào MariaDB.
 - Gateway chỉ **đọc** bảng cấu hình/chính sách; chỉ **ghi** `usage_events` (nhật ký sử dụng) và thời điểm dùng khóa API. Giao diện sở hữu mọi bảng còn lại.
-- Sao lưu/khôi phục: `scripts/backup.sh` / `scripts/restore.sh` (mục 6.2) dùng `pg_dump`.
+- Sao lưu/khôi phục: `scripts/backup.sh` / `scripts/restore.sh` (mục 6.2) dùng `mariadb-dump` / `mariadb`.
+- Hai tài khoản CSDL do `gwctl init` sinh mật khẩu: `gateway` (giao diện và gateway dùng chung) và `root` (chỉ cho khôi phục).
 
 ## 1. Mức kiểm chứng (nói thẳng)
 
@@ -50,7 +51,7 @@ Chuỗi: `đã viết mã → test giả lập đạt → tích hợp staging �
 |---|---|
 | Mã gateway/runner/proxy/giao diện | Đã viết. **Test tự động đạt**: runner 105, gateway 140, proxy 43, giao diện 46; kiểm tra lỗ hổng thư viện Python: sạch |
 | Chạy với CLI thật (Claude, Grok, agy) qua Docker | **Đã chạy trên máy dev** (đợt thăm dò và smoke test), kể cả tìm web mức nhẹ và một bài SEO hoàn chỉnh từ SEO Studio thử |
-| **Diễn tập đúng bộ triển khai này** (PostgreSQL, Caddy, build ảnh, migrate, gọi API, "Kiểm tra ngay", đồng bộ, sao lưu/khôi phục, kiểm tra mạng) | **Đã chạy trên máy dev ngày 19/11/2026** với runner dùng CLI **giả**; kết quả mục 9 |
+| **Diễn tập đúng bộ triển khai này** (MariaDB 10.6, Caddy, build ảnh, migrate, gọi API, "Kiểm tra ngay", đồng bộ, sao lưu/khôi phục, kiểm tra mạng) | **Đã chạy trên máy dev ngày 19/11/2026** với runner dùng CLI **giả**; kết quả mục 9 |
 | Máy AI **tách biệt thật**, tường lửa hai chiều, chặn từ server chính | **CHƯA** (cần quản lý dựng). Mục 9 là danh sách kiểm tra phải chạy |
 | Chế độ TLS của Caddy (`WEB_MODE=tls`), luồng bật 2FA bằng mã | **CHƯA thử** |
 | Luật tường lửa mẫu `deploy/firewall/docker-user.sh.example` | **CHƯA thử** (cần root) |
@@ -69,7 +70,7 @@ Mục tiêu của tài liệu này: để quản lý đưa lên server **không 
 - Máy AI **không** giữ khóa SSH, mật khẩu CSDL hay thông tin đăng nhập nào của server chính.
 
 **Mạng ra từ máy AI** (qua proxy của Cổng AI, không mở rộng hơn):
-- Khi cài: tải ảnh Docker (`php`, `node`, `composer`, `caddy`, `postgres`, `python` từ registry), thư viện (`packagist.org`, `registry.npmjs.org`, `pypi.org`) lúc `build`.
+- Khi cài: tải ảnh Docker (`php`, `node`, `composer`, `caddy`, `mariadb`, `python` từ registry), thư viện (`packagist.org`, `registry.npmjs.org`, `pypi.org`) lúc `build`.
 - Khi chạy: `api.anthropic.com:443` (Claude), `cli-chat-proxy.grok.com:443` (Grok), `daily-cloudcode-pa.googleapis.com:443` và `www.googleapis.com:443` (agy). Danh sách nằm ở `deploy/egress-allowlist.txt`; **chỉ thêm tên miền sau khi hiểu lý do**.
 
 **Luồng mạng cần mở vào máy AI** (mọi thứ khác đóng):
@@ -228,8 +229,9 @@ Tạo `aigw-db-<giờ>.sql.gz` (CSDL) và `aigw-secrets-<giờ>.tar.gz.enc` (th�
 2. Chưa có kiểm tra sức khỏe tài khoản **định kỳ**: chỉ khi bấm "Kiểm tra ngay" hoặc khi có lượt gọi thật. Hết phiên chỉ được phát hiện khi gọi.
 3. Runner khai báo qua tệp Compose (`gwctl new-runner` sinh sẵn); thêm tài khoản chưa làm được hoàn toàn từ giao diện, vì cần đăng nhập và quyền Docker.
 4. Chỉ văn bản và tìm web mức nhẹ. agy đưa prompt qua đối số dòng lệnh (giới hạn khoảng 100.000 byte).
-5. `GATEWAY_CHECK_MODELS` mặc định có tên model của Grok/agy lấy từ đợt thăm dò; cần xác nhận khi dựng runner Grok/agy (đặt lại nếu sai).
-6. Container `gateway` nằm trong hai mạng nội bộ; cửa vào là Caddy. Nếu Caddy bị chiếm, đường tới gateway vẫn bị giới hạn ở `/v1/*` và `/healthz` trong cấu hình hiện hành, nhưng Caddy có đường ra internet: đừng đặt thêm bí mật vào `web`.
+5. Giao diện và gateway **dùng chung một tài khoản CSDL** (`gateway`, đủ quyền trên `aigw`). Thiết kế muốn gateway chỉ đọc bảng chính sách và chỉ ghi `usage_events`; **chưa tách quyền**. Gateway chạy trong mạng nội bộ nên rủi ro thấp, nhưng chưa đạt thiết kế.
+6. `GATEWAY_CHECK_MODELS` mặc định có tên model của Grok/agy lấy từ đợt thăm dò; cần xác nhận khi dựng runner Grok/agy (đặt lại nếu sai).
+7. Container `gateway` nằm trong hai mạng nội bộ; cửa vào là Caddy. Nếu Caddy bị chiếm, đường tới gateway vẫn bị giới hạn ở `/v1/*` và `/healthz` trong cấu hình hiện hành, nhưng Caddy có đường ra internet: đừng đặt thêm bí mật vào `web`.
 
 ## 9. Kiểm tra sau khi cài (làm rồi ghi kết quả vào biên bản nghiệm thu)
 

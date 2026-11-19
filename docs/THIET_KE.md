@@ -61,7 +61,7 @@ Hai mặt tách biệt (control plane và data plane), cộng thêm một "runne
 │  - ghi số liệu       │                     └────────────┬─────────────┘
 └─────────┬────────────┘                                  │
           │ mạng nội bộ, không có đường ra internet       ▼
-          │                                      PostgreSQL + Redis
+          │                                      MariaDB + Redis
           ▼
 ┌───────────────────────────────┐   ┌──────────────────────┐
 │ RUNNER (mỗi tài khoản 1 cái)  │   │ RUNNER-SEARCH (riêng) │
@@ -79,7 +79,7 @@ Hai mặt tách biệt (control plane và data plane), cộng thêm một "runne
 |---|---|---|
 | Gateway (data plane) | **Python 3.12 + FastAPI + uvicorn** | Tái sử dụng logic của hai cầu nối Python hiện có; xử lý bất đồng bộ tốt cho các yêu cầu dài và streaming; PHP-FPM không hợp với yêu cầu chạy hàng phút |
 | Điều khiển (control plane) | **Laravel 12 + Filament 3.3** (Laravel 11 có cảnh báo bảo mật chưa vá; xem KIEM_CHUNG_GIAO_DIEN.md) | Đội đã quen; Filament cho bảng, form, biểu đồ, phân quyền nhanh; giao diện được thay hoàn toàn bằng theme riêng (xem GIAO_DIEN.md) |
-| CSDL | **PostgreSQL** | Dùng chung hai mặt; vai trò DB riêng cho gateway (chỉ đọc bảng chính sách, chỉ INSERT bảng usage) |
+| CSDL | **MariaDB 10.6** (đổi từ PostgreSQL ngày 20/11 để trùng với SEO Studio) | Dùng chung hai mặt; vai trò DB riêng cho gateway (chỉ đọc bảng chính sách, chỉ INSERT bảng usage) |
 | Bộ nhớ đệm, đếm giới hạn | **Redis** | Bộ đếm tốc độ, khóa slot song song, cache chính sách, hàng đợi |
 | Runner | Cùng một image, mỗi tài khoản một container, API HTTP nhỏ nội bộ | **Gateway không cần Docker socket** (socket Docker tương đương quyền root, trái với yêu cầu N5) |
 | Proxy ra ngoài | Proxy chuyển tiếp có allowlist tên miền | Chặn dữ liệu bị gửi ra ngoài nếu AI bị lừa |
@@ -209,7 +209,7 @@ Kiểm tra sức khỏe: định kỳ gọi thử rất nhẹ cho từng tài kh
 ## 10. Vận hành
 
 - Thêm tài khoản: người vận hành chạy script tạo service runner + volume, SSH vào đăng nhập CLI một lần, rồi bấm "Kiểm tra" trên giao diện.
-- Sao lưu: Postgres hằng ngày; volume phiên đăng nhập mã hóa. Có quy trình khôi phục và diễn tập.
+- Sao lưu: MariaDB hằng ngày; volume phiên đăng nhập mã hóa. Có quy trình khôi phục và diễn tập.
 - Cảnh báo: tài khoản hết phiên, tài khoản vào cooldown, app vượt 80%/100% hạn mức, lỗi 5xx tăng, runner không phản hồi, proxy chặn kết nối lạ.
 - Nâng cấp CLI: ghim phiên bản trong image; thử trên staging, chạy bộ test thăm dò + bảo mật rồi mới nâng.
 - Nhật ký kiểm toán không xóa được từ giao diện.

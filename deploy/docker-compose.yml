@@ -1,4 +1,4 @@
-# CỔNG AI — một máy (VM) chạy trọn bộ: PostgreSQL, giao diện điều khiển, gateway, proxy ra ngoài và các runner (mỗi tài khoản AI một runner).
+# CỔNG AI — một máy (VM) chạy trọn bộ: MariaDB, giao diện điều khiển, gateway, proxy ra ngoài và các runner (mỗi tài khoản AI một runner).
 # Runner KHÔNG nằm trong tệp này: mỗi runner là một đoạn deploy/runners.d/<nhãn>.yml do `scripts/gwctl.py new-runner` sinh ra.
 # Luôn chạy qua `scripts/aigw` (tự ghép các đoạn runner). Xem docs/BAN_GIAO_TRIEN_KHAI.md.
 #
@@ -24,9 +24,9 @@ x-control-env: &control-env
   APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
   APP_LOCALE: vi
   APP_FALLBACK_LOCALE: vi
-  DB_CONNECTION: pgsql
+  DB_CONNECTION: mariadb
   DB_HOST: db
-  DB_PORT: "5432"
+  DB_PORT: "3306"
   DB_DATABASE: aigw
   DB_USERNAME: gateway
   SESSION_DRIVER: database
@@ -41,18 +41,24 @@ x-control-env: &control-env
 
 services:
   db:
-    image: postgres:16-bookworm
+    image: mariadb:10.6          # cùng phiên bản với SEO Studio
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # entrypoint của postgres cần để chuyển sang người dùng postgres
-    environment: {POSTGRES_USER: gateway, POSTGRES_DB: aigw, POSTGRES_PASSWORD_FILE: /run/secrets/db_password}
-    secrets: [db_password]
-    volumes: [pgdata:/var/lib/postgresql/data]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # entrypoint của mariadb cần để chuyển sang người dùng mysql
+    environment:
+      MARIADB_DATABASE: aigw
+      MARIADB_USER: gateway
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MARIADB_AUTO_UPGRADE: "1"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--skip-name-resolve", "--max-connections=100"]
+    secrets: [db_password, db_root_password]
+    volumes: [dbdata:/var/lib/mysql]
     networks: [back]
     logging: {driver: json-file, options: {max-size: "20m", max-file: "5"}}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gateway -d aigw"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -166,12 +172,13 @@ networks:
   edge: {}
 
 volumes:
-  pgdata: {}
+  dbdata: {}
   control_storage: {}
 
 secrets:
   app_key: {file: "${SECRETS_DIR}/app_key"}                # APP_KEY của Laravel, đồng thời là "tiêu" băm khóa API ở gateway
   db_password: {file: "${SECRETS_DIR}/db_password"}
+  db_root_password: {file: "${SECRETS_DIR}/db_root_password"}
   database_url: {file: "${SECRETS_DIR}/database_url"}
   admin_token: {file: "${SECRETS_DIR}/admin_token"}        # giao diện dùng để gọi /internal/* của gateway
   runner_secrets: {file: "${SECRETS_DIR}/runner_secrets.json"}

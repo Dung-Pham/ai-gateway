@@ -1,5 +1,5 @@
 #!/bin/sh
-# Sao lưu: CSDL PostgreSQL (nén) + thư mục bí mật (mã hóa nếu có AIGW_BACKUP_PASSPHRASE_FILE). Không sao lưu phiên đăng nhập CLI trong auth/ nếu --no-auth.
+# Sao lưu: CSDL MariaDB (nén) + thư mục bí mật (mã hóa nếu có AIGW_BACKUP_PASSPHRASE_FILE). Không sao lưu phiên đăng nhập CLI trong auth/ nếu --no-auth.
 # Dùng:  scripts/backup.sh [thư_mục_đích=/var/backups/aigw]
 # Khôi phục: scripts/restore.sh <tệp .sql.gz> (CSDL) — bí mật khôi phục bằng tay (xem docs/BAN_GIAO_TRIEN_KHAI.md).
 set -eu
@@ -8,7 +8,7 @@ DEST="${1:-/var/backups/aigw}"; STAMP="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$DEST"; chmod 700 "$DEST"
 cd "$HERE/../deploy"
 SECRETS="$(sed -n 's/^SECRETS_DIR=\(.*\)$/\1/p' .env | tail -1)"; SECRETS="${SECRETS:-./secrets}"
-"$HERE/aigw" exec -T db pg_dump -U gateway -d aigw --no-owner | gzip -9 > "$DEST/aigw-db-$STAMP.sql.gz"
+"$HERE/aigw" exec -T db sh -c 'mariadb-dump -ugateway -p"$(cat /run/secrets/db_password)" --single-transaction --routines --default-character-set=utf8mb4 aigw' | gzip -9 > "$DEST/aigw-db-$STAMP.sql.gz"
 chmod 600 "$DEST/aigw-db-$STAMP.sql.gz"
 if [ -n "${AIGW_BACKUP_PASSPHRASE_FILE:-}" ]; then
     tar -C "$SECRETS" -czf - . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:$AIGW_BACKUP_PASSPHRASE_FILE" -out "$DEST/aigw-secrets-$STAMP.tar.gz.enc"

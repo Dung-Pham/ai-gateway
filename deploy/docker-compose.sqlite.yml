@@ -1,4 +1,4 @@
-# CHỈ DÙNG KHI DEV: gateway đọc CSDL SQLite dùng chung với giao diện điều khiển chạy cục bộ. Production dùng PostgreSQL (docker-compose.yml).
+# CHỈ DÙNG KHI DEV: gateway đọc CSDL SQLite dùng chung với giao diện điều khiển chạy cục bộ. Production dùng MariaDB (docker-compose.yml).
 # Cách dùng: docker compose -f docker-compose.yml -f docker-compose.sqlite.yml -f runners.d/<nhãn>.yml up -d gateway runner-<nhãn> egress-proxy
 services:
   gateway:

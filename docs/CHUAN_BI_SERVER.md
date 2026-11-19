@@ -48,7 +48,7 @@ Cột "Ai cung cấp": **Bạn** = thông tin hoặc quyền chỉ bạn có; **
 | Hạng mục | Yêu cầu | Trạng thái | Ai |
 |---|---|---|---|
 | Hệ điều hành và Docker | Linux, Docker Engine và Compose plugin | Đã chốt Docker Compose | Bạn |
-| Cấu hình máy | Số nhân CPU, RAM, ổ đĩa (cho volume phiên đăng nhập và Postgres) | **Chưa biết**: RAM mỗi lượt gọi CLI phải đo ở P8/G8 trước | Chờ thăm dò |
+| Cấu hình máy | Số nhân CPU, RAM, ổ đĩa (cho volume phiên đăng nhập và MariaDB) | **Chưa biết**: RAM mỗi lượt gọi CLI phải đo ở P8/G8 trước | Chờ thăm dò |
 | Tên miền hoặc tên nội bộ cho cổng quản trị và cho API | Ví dụ một tên nội bộ cho giao diện, một tên cho API | Chưa chọn | Bạn |
 | Chứng chỉ HTTPS | Cho giao diện quản trị (và API nếu đi qua mạng) | Chưa có | Bạn |
 | Đường vào giao diện quản trị | Chỉ từ mạng nội bộ hoặc VPN | Đã quyết ở thiết kế | Bạn |
@@ -74,9 +74,9 @@ Chưa biết tần suất hết phiên của từng hãng; kết quả P10/G10 v
 | Bí mật | Dùng làm gì | Lưu ở đâu |
 |---|---|---|
 | `APP_KEY` của Laravel | Mã hóa phiên, và hiện cũng làm "tiêu" băm khóa API của ứng dụng | `.env` trên server |
-| Mật khẩu PostgreSQL, Redis | Kết nối dữ liệu | `.env` / Docker secrets |
+| Mật khẩu MariaDB, Redis | Kết nối dữ liệu | `.env` / Docker secrets |
 | Khóa nội bộ gateway ↔ runner | Runner chỉ nhận lệnh từ gateway | Docker secrets |
-| Vai trò DB riêng cho gateway | Chỉ đọc bảng chính sách, chỉ ghi `usage_events` | Postgres |
+| Vai trò DB riêng cho gateway | Chỉ đọc bảng chính sách, chỉ ghi `usage_events` | MariaDB |
 | Khóa mã hóa bản sao lưu | Mã hóa sao lưu volume phiên đăng nhập | Ngoài server (người giữ) |
 | Tài khoản quản trị đầu tiên | Đăng nhập giao diện, bật 2FA | Bạn đặt khi cài |
 

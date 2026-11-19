@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Công cụ vận hành (chạy trên máy AI bởi NGƯỜI VẬN HÀNH, không phải từ giao diện web). Chỉ cần Python 3, không cần cài thêm gì.
 
-  gwctl.py init <thư_mục_bí_mật>                       # tạo MỌI bí mật một lần: app_key, db_password, database_url, admin_token, runner_secrets.json
+  gwctl.py init <thư_mục_bí_mật>                       # tạo MỌI bí mật một lần: app_key, db_password, db_root_password, database_url, admin_token, runner_secrets.json
   gwctl.py new-runner <thư_mục_bí_mật> <claude|grok|agy> <nhãn>   # tạo auth/ + bí mật runner + deploy/runners.d/<nhãn>.yml (đoạn Compose tự sinh)
   gwctl.py list-runners                                  # liệt kê runner đã khai báo
 
@@ -42,10 +42,11 @@ def init(root):
     dbpw = secrets.token_urlsafe(32)
     write_secret(os.path.join(root, "app_key"), app_key)
     write_secret(os.path.join(root, "db_password"), dbpw)
-    write_secret(os.path.join(root, "database_url"), f"postgresql+psycopg://gateway:{dbpw}@db:5432/aigw")
+    write_secret(os.path.join(root, "db_root_password"), secrets.token_urlsafe(32))      # root MariaDB: chỉ dùng cho khôi phục/bảo trì
+    write_secret(os.path.join(root, "database_url"), f"mysql+pymysql://gateway:{dbpw}@db:3306/aigw?charset=utf8mb4")
     write_secret(os.path.join(root, "admin_token"), secrets.token_hex(24))
     write_secret(os.path.join(root, "runner_secrets.json"), "{}")
-    print(f"Đã tạo app_key, db_password, database_url, admin_token, runner_secrets.json trong {root} (quyền 0600/0700).")
+    print(f"Đã tạo app_key, db_password, db_root_password, database_url, admin_token, runner_secrets.json trong {root} (quyền 0600/0700).")
     print("Việc tiếp theo: SAO LƯU thư mục này ra nơi an toàn (xem docs/BAN_GIAO_TRIEN_KHAI.md, bước sao lưu).")
 
 
