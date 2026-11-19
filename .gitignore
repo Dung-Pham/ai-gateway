@@ -1,0 +1,18 @@
+# Bí mật và dữ liệu thăm dò — không bao giờ commit
+.env
+.env.*
+*.token
+*.pem
+*.key
+probe-results/
+.probe/
+
+# Dữ liệu cục bộ
+*.sqlite
+*.dump
+*.sql.gz
+__pycache__/
+.venv/
+node_modules/
+vendor/
+storage/logs/
