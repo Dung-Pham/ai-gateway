@@ -111,6 +111,22 @@ Lưu ý chất lượng: tiêu đề đôi khi là siêu dữ liệu thô của 
 
 **Chuyển SEO Studio sang gateway (chưa làm):** (1) đăng ký ứng dụng trong giao diện điều khiển, cấp cả `text` và `web_search`, tạo khóa; (2) trỏ nhà cung cấp "claude_bridge" sang địa chỉ gateway với khóa mới (đường `/v1/search` giữ nguyên); (3) tên model: gateway nhận `claude:sonnet`, còn dạng không tiền tố (`sonnet`) chỉ được chấp nhận khi pool của ứng dụng chỉ có một hãng, nên nên cho SEO Studio một pool chỉ có Claude; (4) thêm địa chỉ gateway vào `AI_PRIVATE_BASE_URL_ALLOWLIST`; (5) chạy song song với cầu nối cũ một thời gian trước khi tắt.
 
+## Thử chuyển SEO Studio sang gateway (19/11/2026, bản thử `seo-plan-import`)
+
+**Mức kiểm chứng:** code + test giả lập + chạy tích hợp trên máy dev. **Chưa** staging, **chưa** máy AI tách biệt, **chưa** có người nghiệm thu, **chưa** chuyển bản SEO Studio thật.
+
+Đã làm:
+1. Dựng stack chỉ có Claude (gateway + egress-proxy + `runner-claude-01`), CSDL riêng: một pool "chỉ Claude", một ứng dụng `seo-studio` có `text` + `web_search`, một khóa; gateway nghe trên cầu Docker (`GATEWAY_BIND=172.17.0.1`, cổng 18771), không mở ra mạng ngoài. Runner dùng token tài khoản chạy bài (`~/.claude-runner`), không dùng tài khoản đang code.
+2. Từ container SEO Studio: `/v1/models`, `/v1/chat/completions` (model `haiku` không tiền tố) và `/v1/search` đều chạy.
+3. Trong `seo-plan-import`: thêm `172.17.0.1:18771` vào `AI_PRIVATE_BASE_URL_ALLOWLIST` (phải tạo lại container vì biến môi trường không đổi được khi đang chạy), chạy `agent:claude-setup --base-url=http://172.17.0.1:18771/v1 --roles=writer,strategist` (khóa truyền qua biến `CLAUDE_BRIDGE_TOKEN`, không in ra).
+4. Chạy `agent:run` cho một bài ("huyết áp thấp là gì"): ra bản nháp `needs_review`, cổng ghi 8 lượt `text` (sonnet) và 10 lượt `web_search`, 0 lỗi.
+
+Đối chiếu với cầu nối cũ (đã chỉ còn WebSearch), cùng từ khóa, **mỗi bên một lần chạy** (mẫu quá nhỏ để kết luận): cổng ~2.470 từ, 7 nguồn được trích, 36.601 token, 5.607 VND; cầu nối cũ ~2.430 từ, 5 nguồn được trích, 33.333 token, 4.445 VND. Cả hai bài đều bị gắn cờ cần người có chuyên môn duyệt.
+
+Kiểm tra nguồn của bài ở gateway: NHS, MedlinePlus, Cleveland Clinic, Vinmec, PMC tải được và chứa các từ khóa cốt lõi; PubMed 38123372 khớp tiêu đề bài trích. **Chưa xác minh được:** Mayo Clinic (403), StatPearls (reCAPTCHA; là nguồn cho mốc tâm thu <90 / huyết áp trung bình <65), Bộ Y tế (lỗi SSL). Chưa đối chiếu từng câu trích với từng nguồn. Danh sách nguồn cuối bài có 11 mục nhưng thân bài chỉ trích 7 (cả hai bản đều lệch kiểu này).
+
+Phát hiện vận hành: systemd người dùng **không thực thi** `IPAddressDeny=`/`IPAddressAllow=` (cần quyền BPF của dịch vụ cấp hệ thống), nên không dùng làm lớp chặn cho cầu nối cũ; thay bằng bỏ WebFetch khỏi cầu nối cũ và dùng egress proxy của gateway.
+
 ## Giới hạn đã biết (nói thẳng)
 1. **Chỉ văn bản và tìm web mức nhẹ.** Chưa có stream, ảnh vào/ra, tìm web đầy đủ (`WebFetch`). Gateway trả `stream_not_supported` / `capability_not_supported` cho phần chưa có.
 2. **Một tiến trình gateway**; cooldown, tài khoản hết phiên, bộ đếm rpm nằm trong bộ nhớ, mất khi khởi động lại. Muốn mở rộng phải chuyển sang Redis.
