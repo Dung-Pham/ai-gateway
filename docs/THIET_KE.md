@@ -53,7 +53,7 @@ Hai mặt tách biệt (control plane và data plane), cộng thêm một "runne
         ▼                                          ▼
 ┌──────────────────────┐   đọc chính sách    ┌──────────────────────────┐
 │  GATEWAY (data plane)│◄────────────────────│ ĐIỀU KHIỂN (control plane)│
-│  Python / FastAPI    │   ghi usage_events  │ Laravel 11 + Filament 3   │
+│  Python / FastAPI    │   ghi usage_events  │ Laravel 12 + Filament 3   │
 │  - xác thực API key  │────────────────────►│ - quản trị app/tài khoản  │
 │  - chính sách, hạn mức│                    │ - bảng điều khiển, cảnh báo│
 │  - định tuyến, retry │                     │ - kiểm toán, cài đặt      │
@@ -77,7 +77,7 @@ Hai mặt tách biệt (control plane và data plane), cộng thêm một "runne
 | Thành phần | Chọn | Lý do |
 |---|---|---|
 | Gateway (data plane) | **Python 3.12 + FastAPI + uvicorn** | Tái sử dụng logic của hai cầu nối Python hiện có; xử lý bất đồng bộ tốt cho các yêu cầu dài và streaming; PHP-FPM không hợp với yêu cầu chạy hàng phút |
-| Điều khiển (control plane) | **Laravel 11 + Filament 3.x** (cùng phiên bản SEO Studio) | Đội đã quen; Filament cho bảng, form, biểu đồ, phân quyền nhanh; giao diện được thay hoàn toàn bằng theme riêng (xem GIAO_DIEN.md) |
+| Điều khiển (control plane) | **Laravel 12 + Filament 3.3** (Laravel 11 có cảnh báo bảo mật chưa vá; xem KIEM_CHUNG_GIAO_DIEN.md) | Đội đã quen; Filament cho bảng, form, biểu đồ, phân quyền nhanh; giao diện được thay hoàn toàn bằng theme riêng (xem GIAO_DIEN.md) |
 | CSDL | **PostgreSQL** | Dùng chung hai mặt; vai trò DB riêng cho gateway (chỉ đọc bảng chính sách, chỉ INSERT bảng usage) |
 | Bộ nhớ đệm, đếm giới hạn | **Redis** | Bộ đếm tốc độ, khóa slot song song, cache chính sách, hàng đợi |
 | Runner | Cùng một image, mỗi tài khoản một container, API HTTP nhỏ nội bộ | **Gateway không cần Docker socket** (socket Docker tương đương quyền root, trái với yêu cầu N5) |

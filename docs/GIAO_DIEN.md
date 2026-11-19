@@ -75,7 +75,7 @@ Tên và giá trị là đề xuất. Giá trị tương phản ghi dưới đâ
 | Xanh chủ đạo 600 (nút, liên kết, trọng tâm) | `#1E5BC6` | `#6EA2FF` | Chữ trắng trên `#1E5BC6` ≈ 6,2:1 (tính sơ bộ) |
 | Xanh đậm 700 (hover, nhấn) | `#1749A0` | `#9BBEFF` | |
 | Xanh nhạt 50 / 100 (nền chọn, chip) | `#EEF4FF` / `#DCE8FF` | `#12264D` / `#1A3366` | |
-| Xanh điểm nhấn phụ (biểu đồ thứ hai) | `#0E8FB0` | `#4CC3E0` | Cyan, để phân biệt với chủ đạo |
+| Xanh điểm nhấn phụ (biểu đồ thứ hai) | `#0C7692` | `#4CC3E0` | Cyan, để phân biệt với chủ đạo |
 | Chữ chính (mực xanh navy) | `#0B1B33` | `#E8EEF8` | |
 | Chữ phụ | `#4A5A73` | `#9FB0C9` | Phải đạt AA trên nền tương ứng |
 | Nền trang | `#F4F7FB` | `#0A1220` | |

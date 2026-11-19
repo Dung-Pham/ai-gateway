@@ -1,0 +1,68 @@
+@import '/vendor/filament/filament/resources/css/theme.css';
+
+@config 'tailwind.config.js';
+
+/* ---- Token riêng của Cổng AI (xem docs/GIAO_DIEN.md mục 2) ---- */
+:root {
+    --gw-navy: #0b1b33;
+    --gw-navy-2: #12264d;
+    --gw-ink-soft: #c7d4ea;
+    --gw-ok: #17804f;
+    --gw-warn: #a8650f;
+    --gw-bad: #c0392b;
+    --gw-track: #e3eaf5;
+}
+.dark {
+    --gw-ok: #4fd08a;
+    --gw-warn: #f0b35a;
+    --gw-bad: #ff7b6e;
+    --gw-track: #233250;
+}
+
+/* Số liệu thẳng cột, dùng được ở mọi nơi. */
+.fi-body { font-variant-numeric: tabular-nums; }
+.gw-mono { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+/* ---- Dải trạng thái toàn hệ thống ---- */
+.gw-strip { background: var(--gw-navy); color: #fff; border-bottom: 1px solid rgb(255 255 255 / 0.08); }
+.gw-strip a { color: inherit; }
+.gw-strip-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1.25rem; padding: 0.5rem 1rem; max-width: 96rem; margin: 0 auto; font-size: 0.8125rem; line-height: 1.25rem; }
+@media (min-width: 1024px) { .gw-strip-inner { padding-inline: 2rem; } }
+.gw-dot { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 9999px; margin-right: 0.4rem; vertical-align: 0.05em; }
+.gw-chip { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+/* ---- Vòng đo ---- */
+.gw-gauge-track { stroke: var(--gw-track); }
+.gw-gauge-ok { stroke: rgb(var(--primary-600)); }
+.dark .gw-gauge-ok { stroke: rgb(var(--primary-400)); }
+.gw-gauge-warn { stroke: var(--gw-warn); }
+.gw-gauge-bad { stroke: var(--gw-bad); }
+
+/* ---- Dải hạn mức ---- */
+.gw-bar { height: 0.5rem; border-radius: 9999px; background: var(--gw-track); overflow: hidden; }
+.gw-bar > span { display: block; height: 100%; border-radius: 9999px; background: rgb(var(--primary-600)); }
+.dark .gw-bar > span { background: rgb(var(--primary-400)); }
+.gw-bar > span.warn { background: var(--gw-warn); }
+.gw-bar > span.bad { background: var(--gw-bad); }
+
+/* Tôn trọng người dùng muốn giảm chuyển động. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Menu ngang: không cho chữ xuống dòng; khi chật thì Filament tự thu gọn. */
+.fi-topbar nav a,
+.fi-topbar nav button,
+.fi-topbar .fi-topbar-item-label { white-space: nowrap; }
+.fi-topbar nav ul { flex-wrap: nowrap; }
+
+/* Vùng chạm tối thiểu 44px trên màn hình nhỏ (WCAG 2.5.8 / quy ước của dự án). */
+@media (max-width: 1023px) {
+    .fi-topbar button,
+    .fi-topbar a,
+    .fi-topbar input[type='search'],
+    .fi-sidebar-nav a,
+    .fi-sidebar-group-button,
+    .fi-sidebar-close-overlay { min-height: 44px; min-width: 44px; }
+    .gw-strip a.gw-chip { min-height: 44px; }
+}
