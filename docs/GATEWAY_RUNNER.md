@@ -60,7 +60,28 @@ Cờ cứng hóa từng CLI (đã kiểm chứng ở KET_QUA_THAM_DO, đã mã h
 
 Hệ quả: **mức "tìm nhẹ" đã được dựng** (xem mục dưới). Mức "tìm đầy đủ" với `WebFetch` **chưa dựng**: nếu cần, phải là runner **riêng** sau một proxy "web công khai" (cho mọi tên miền công khai cổng 80/443, chặn mọi địa chỉ nội bộ sau khi phân giải; bộ lọc đã có sẵn trong `egress-proxy/`, chỉ cần thêm chế độ không allowlist tên miền), dùng tài khoản riêng, và coi mọi nội dung trang là dữ liệu không tin cậy.
 
-**Cảnh báo về cầu nối hiện tại:** `claude_bridge.py` đang cho Claude dùng `WebFetch` **ngay trên server chính, không có bộ lọc địa chỉ nội bộ nào**. Tôi **chưa kiểm tra** `WebFetch` có tự chặn địa chỉ riêng/metadata không. Nếu không, một trang web độc hại có thể khiến nó tải URL nội bộ. Nên kiểm tra sớm.
+## Kiểm tra: WebFetch của cầu nối cũ có chặn địa chỉ nội bộ không? (19/11/2026)
+
+**Kết luận: KHÔNG có bộ lọc địa chỉ nội bộ thật; chỉ có kiểm tra theo tên, và nó bị vượt qua được.** Cầu nối cũ (`claude_bridge.py`) cho Claude dùng `WebFetch` trên server chính, không container, không proxy.
+
+Cách đo (`scripts/webfetch_ssrf_probe.py`): dựng máy chủ "mồi" chỉ trả một chuỗi vô hại trên các địa chỉ nội bộ của máy; chạy Claude đúng cờ của cầu nối, bảo nó tải từng URL; bằng chứng lấy từ nhật ký kết nối của máy mồi và `strace -e connect` (không dựa vào việc mô hình tự từ chối).
+
+| URL | Kết quả |
+|---|---|
+| `http://localhost:…`, `http://[::1]:…` | **Bị từ chối trước khi kết nối** ("WebFetch từ chối URL localhost"): kiểm tra theo **tên** |
+| `http://127.0.0.1:…` | **Đã kết nối** (máy mồi nhận TLS ClientHello) |
+| `http://192.168.1.18:…` (địa chỉ LAN) | **Đã kết nối** |
+| `http://172.17.0.1:…` (cầu Docker) | **Đã kết nối** |
+| `http://169.254.169.254/…` (metadata) | **Đã `connect()`** tới `169.254.169.254:443` (bị từ chối vì không có dịch vụ) |
+| `http://127.0.0.1.nip.io:…` (tên công khai trỏ về loopback) | **Đã kết nối tới 127.0.0.1**: kiểm tra theo tên **bị vượt qua** |
+
+Chi tiết quan trọng: mọi kết nối đều là **HTTPS** (với `http://` có cổng rõ ràng, máy mồi vẫn nhận TLS ClientHello; metadata bị kết nối ở cổng 443). Vì vậy dịch vụ nội bộ **chỉ nói HTTP** (siêu dữ liệu đám mây, đa số trang quản trị nội bộ) **không đọc được** qua đường này trong thử nghiệm của tôi.
+
+**Chưa chứng minh được** (không nên khẳng định quá): việc đọc **nội dung** từ một dịch vụ nội bộ. Máy mồi của tôi không nói TLS nên không hoàn tất bắt tay. Chưa thử: dịch vụ HTTPS nội bộ thật với chứng chỉ mà CLI chấp nhận; chuyển hướng (redirect) từ trang công khai sang URL nội bộ; đường lời nhắc độc hại thật từ nội dung trang tìm được.
+
+Rủi ro còn lại (đã suy luận, chưa khai thác thử): (1) tên nội bộ có chứng chỉ công khai hợp lệ trỏ về IP riêng thì đọc được; (2) có thể **dò mạng nội bộ**: thông báo lỗi khác nhau ("Socket is closed" so với "ECONNREFUSED") cho biết máy/cổng nào mở; (3) GET tới điểm cuối HTTPS nội bộ có tác dụng phụ. Mức độ: **trung bình, không phải lỗ hổng đọc dữ liệu hiển nhiên**, nhưng thiếu hẳn một lớp kiểm soát cơ bản và nằm trên server chính.
+
+Cách xử lý (chưa làm, chờ bạn quyết): (a) đổi `run_search` của cầu nối cũ sang **chỉ `WebSearch`** như gateway mức nhẹ (mẫu thử cho kết quả tương đương); hoặc (b) chuyển SEO Studio sang gateway; (c) tạm thời chặn đường ra của dịch vụ cầu nối tới dải riêng/loopback/link-local bằng systemd (`IPAddressDeny=`/`IPAddressAllow=`, cần thử vì cầu nối cũng phải nhận kết nối từ mạng Docker).
 
 ## Khả năng `web_search` mức nhẹ (đã dựng, 19/11/2026)
 
