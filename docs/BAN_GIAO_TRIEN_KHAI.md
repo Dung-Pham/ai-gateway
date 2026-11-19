@@ -22,6 +22,26 @@ Mọi thứ chạy **trên MỘT máy riêng ("máy AI")** bằng Docker Compose
 
 Hai điểm bảo mật cốt lõi: (1) AI/CLI bị lừa hay bị khai thác cũng không ra internet tự do và không chạm được mạng nội bộ; (2) giao diện quản trị và `/internal/*` của gateway **không** lộ ra ngoài.
 
+## 0.1 Công nghệ và cơ sở dữ liệu (quản lý cần biết cài gì)
+
+**Trên máy AI chỉ cần cài: Docker Engine, Docker Compose v2, `python3`, `curl`, `openssl`** (xem mục 2). **Không** cần cài PHP, Node, Composer, Python thư viện hay PostgreSQL lên máy: tất cả nằm trong ảnh Docker, `scripts/aigw up` tự build và tải. Lần build đầu cần internet (xem mục 2, "Mạng ra từ máy AI").
+
+| Thành phần | Công nghệ | Chạy ở đâu |
+|---|---|---|
+| Giao diện quản trị | PHP 8.3, Laravel 12, Filament 3 (+ filament-breezy cho 2FA), Tailwind/Vite | Container `control`, `scheduler` |
+| Cửa vào, TLS | Caddy 2.8 | Container `web` |
+| Gateway (API OpenAI-tương-thích) | Python 3.12, FastAPI, uvicorn, SQLAlchemy, httpx (thư viện khóa phiên bản ở `gateway/requirements.lock`) | Container `gateway` |
+| Runner (chạy CLI AI) | Python 3.12 chỉ thư viện chuẩn; CLI của hãng gắn chỉ-đọc từ `/opt/cli` | Container `runner-<nhãn>` |
+| Proxy chặn đường ra | Python 3.12 chỉ thư viện chuẩn | Container `egress-proxy` |
+| **Cơ sở dữ liệu** | **PostgreSQL 16** | Container `db`, dữ liệu ở volume Docker `pgdata` |
+
+**Cơ sở dữ liệu và SQL:**
+- Loại: **PostgreSQL 16 ở production** (đã chạy thật trong bản diễn tập). Dev trên máy cá nhân dùng SQLite.
+- **Không có tệp SQL để nạp tay.** Cấu trúc bảng nằm ở các migration Laravel (`control/database/migrations/*.php`); `scripts/aigw up` tự chạy `php artisan migrate` rồi `gateway:seed-baseline` (nạp hãng AI, khả năng, trọng số model mặc định; chạy lại nhiều lần an toàn).
+- `contracts/control_schema.sql` **không dùng để cài đặt**: đó là bản mô tả cấu trúc (dạng SQLite) để test kiểm tra gateway và giao diện luôn khớp bảng. Đừng nạp nó vào PostgreSQL.
+- Gateway chỉ **đọc** bảng cấu hình/chính sách; chỉ **ghi** `usage_events` (nhật ký sử dụng) và thời điểm dùng khóa API. Giao diện sở hữu mọi bảng còn lại.
+- Sao lưu/khôi phục: `scripts/backup.sh` / `scripts/restore.sh` (mục 6.2) dùng `pg_dump`.
+
 ## 1. Mức kiểm chứng (nói thẳng)
 
 Chuỗi: `đã viết mã → test giả lập đạt → tích hợp staging → người thật nghiệm thu`.
