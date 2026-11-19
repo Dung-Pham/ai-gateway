@@ -25,3 +25,4 @@ deploy/runners.d/*.yml
 !deploy/runners.d/README.md
 deploy/certs/
 !deploy/.env.example
+!control/.env.example
