@@ -5,3 +5,5 @@ cli-chat-proxy.grok.com:443    # Grok (bắt buộc)
 # Claude còn gọi http-intake.logs.us5.datadoghq.com (đo đạc) và mcp-proxy.anthropic.com (connector): CỐ Ý không cho phép.
 daily-cloudcode-pa.googleapis.com:443   # Antigravity (agy): API mô hình (quan sát thật ở smoke test)
 www.googleapis.com:443   # Antigravity (agy): kiểm tra điều kiện qua oauth2/v2/userinfo (bắt buộc, quan sát thật)
+chatgpt.com:443   # Codex (ChatGPT): API mô hình và xác thực (quan sát thật 20/11). ab.chatgpt.com (đo đạc) CỐ Ý không cho phép: bị chặn vẫn chạy
+api.openai.com:443   # Codex: CHỈ để nhận lỗi 401 nhanh khi hết phiên (không có thì CLI thử lại ~5 phút rồi mới báo timeout). Lượt gọi thật chỉ dùng chatgpt.com

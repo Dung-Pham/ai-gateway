@@ -8,8 +8,8 @@ import sys
 import time
 
 argv = sys.argv[1:]
-prov = "claude" if "-p" in argv else "grok" if "--prompt-file" in argv else "agy"
-if prov == "claude":
+prov = "codex" if argv[:1] == ["exec"] else "claude" if "-p" in argv else "grok" if "--prompt-file" in argv else "agy"
+if prov in ("claude", "codex"):
     prompt = sys.stdin.read()
 elif prov == "grok":
     prompt = open(argv[argv.index("--prompt-file") + 1], encoding="utf-8").read()
@@ -20,7 +20,7 @@ if os.environ.get("STUB_LOG"):
     with open(os.environ["STUB_LOG"], "a") as f:
         f.write(json.dumps({"provider": prov, "argv": [a for a in argv if a != prompt and not a.startswith("[HƯỚNG")],
                             "env_keys": sorted(os.environ), "home": os.environ.get("HOME"), "cwd": os.getcwd(),
-                            "env": {k: os.environ[k] for k in os.environ if k.startswith(("GROK_", "CLAUDE_"))}}) + "\n")
+                            "env": {k: os.environ[k] for k in os.environ if k.startswith(("GROK_", "CLAUDE_", "CODEX_"))}}) + "\n")
 
 def has(tag): return tag in prompt
 if has("@@SLOW"): time.sleep(30)
@@ -72,6 +72,24 @@ if prov == "claude":
         print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "xin chào", "total_cost_usd": 0.00064729,
                           "usage": {"input_tokens": 2, "output_tokens": 6, "cache_read_input_tokens": 649, "cache_creation_input_tokens": 3188},
                           "modelUsage": {"claude-haiku-5-5": {}}}))
+elif prov == "codex":
+    refresh(os.path.join(os.environ["CODEX_HOME"], "auth.json"))
+    # Định dạng lấy từ lần chạy codex-cli 0.163.0 thật (20/11/2026). Câu chữ lỗi hết hạn mức CHƯA quan sát thật (đoán).
+    print(json.dumps({"type": "thread.started", "thread_id": "t1"}))
+    print(json.dumps({"type": "item.completed", "item": {"id": "item_0", "type": "error", "message": "Code Mode is unavailable because code-mode host is disabled."}}))   # cảnh báo THẬT, không phải dùng công cụ
+    print(json.dumps({"type": "turn.started"}))
+    if has("@@AUTH"):
+        for i in (2, 3):
+            print(json.dumps({"type": "error", "message": f"Reconnecting... {i}/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses)"}))
+        sys.exit(1)
+    if has("@@LIMIT"):
+        print(json.dumps({"type": "error", "message": "You've hit your usage limit. Try again later."})); sys.exit(1)
+    if has("@@TOOLS"):
+        print(json.dumps({"type": "item.completed", "item": {"id": "item_0", "type": "command_execution", "command": "/bin/bash -lc id"}}))
+    if has("@@NOTURN"):
+        print(json.dumps({"type": "item.completed", "item": {"id": "item_1", "type": "agent_message", "text": "dang do"}})); sys.exit(1)
+    print(json.dumps({"type": "item.completed", "item": {"id": "item_1", "type": "agent_message", "text": "xin chào"}}))
+    print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 12773, "cached_input_tokens": 10880, "cache_write_input_tokens": 0, "output_tokens": 5, "reasoning_output_tokens": 0}}))
 elif prov == "grok":
     home = os.environ["GROK_HOME"]
     refresh(os.path.join(home, "auth.json"))

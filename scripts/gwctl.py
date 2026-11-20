@@ -2,7 +2,7 @@
 """Công cụ vận hành (chạy trên máy AI bởi NGƯỜI VẬN HÀNH, không phải từ giao diện web). Chỉ cần Python 3, không cần cài thêm gì.
 
   gwctl.py init <thư_mục_bí_mật>                       # tạo MỌI bí mật một lần: app_key, db_password, db_root_password, database_url, admin_token, runner_secrets.json
-  gwctl.py new-runner <thư_mục_bí_mật> <claude|grok|agy> <nhãn>   # tạo auth/ + bí mật runner + deploy/runners.d/<nhãn>.yml (đoạn Compose tự sinh)
+  gwctl.py new-runner <thư_mục_bí_mật> <claude|grok|agy|codex> <nhãn>   # tạo auth/ + bí mật runner + deploy/runners.d/<nhãn>.yml (đoạn Compose tự sinh)
   gwctl.py list-runners                                  # liệt kê runner đã khai báo
 
 Bí mật không bao giờ bị ghi đè (O_EXCL). Mất app_key = mọi khóa API đã cấp vô hiệu: PHẢI sao lưu thư mục bí mật (scripts/backup.sh).
@@ -24,6 +24,7 @@ PROVIDER_TEMPLATE = {
              "extra_env": "      RUNNER_GROK_DENY_FILE: /pins/deny.txt\n",
              "extra_vol": "      - ../runner/pins/grok-1.0.70.deny.txt:/pins/deny.txt:ro\n"},
     "agy": {"env": "CLI_AGY", "sha": "AGY_SHA256", "bin": "agy", "extra_env": '      RUNNER_TIMEOUT_S: "200"\n', "extra_vol": ""},
+    "codex": {"env": "CLI_CODEX", "sha": "CODEX_SHA256", "bin": "codex", "extra_env": "", "extra_vol": ""},
 }
 
 
@@ -52,7 +53,7 @@ def init(root):
 
 def new_runner(root, provider, label):
     if provider not in PROVIDER_TEMPLATE or not LABEL_RE.match(label):
-        sys.exit("Hãng phải là claude|grok|agy; nhãn chỉ gồm chữ thường, số và gạch ngang.")
+        sys.exit("Hãng phải là claude|grok|agy|codex; nhãn chỉ gồm chữ thường, số và gạch ngang.")
     frag = os.path.join(RUNNERS_D, f"{label}.yml")
     if os.path.exists(frag):
         sys.exit(f"Đã có {frag}.")

@@ -24,7 +24,7 @@ from .runner_client import HttpRunnerClient, RunnerRef, validate_runner_url
 from .state import State
 
 log = logging.getLogger("gateway")
-PROVIDERS = ("claude", "grok", "agy")
+PROVIDERS = ("claude", "grok", "agy", "codex")
 MODEL_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 RETRYABLE = {"rate_limited", "auth_expired", "busy", "tripped"}
 

@@ -11,7 +11,7 @@ from runner.server import RunnerService  # noqa: E402
 
 STUB = os.path.join(os.path.dirname(__file__), "stub_cli.py")
 SECRET = "s" * 48
-TOKEN_FILES = {"claude": ".credentials.json", "grok": "auth.json", "agy": os.path.join(".gemini", "antigravity-cli", "antigravity-oauth-token")}
+TOKEN_FILES = {"claude": ".credentials.json", "grok": "auth.json", "agy": os.path.join(".gemini", "antigravity-cli", "antigravity-oauth-token"), "codex": "auth.json"}
 
 
 @pytest.fixture

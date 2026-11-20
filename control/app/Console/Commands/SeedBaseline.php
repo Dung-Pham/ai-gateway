@@ -16,7 +16,7 @@ class SeedBaseline extends Command
 
     public function handle(): int
     {
-        foreach ([['claude', 'Claude', '#6D5BD0'], ['grok', 'Grok', '#B0409A'], ['agy', 'Antigravity', '#0C7692']] as [$code, $name, $color]) {
+        foreach ([['claude', 'Claude', '#6D5BD0'], ['grok', 'Grok', '#B0409A'], ['agy', 'Antigravity', '#0C7692'], ['codex', 'Codex', '#10A37F']] as [$code, $name, $color]) {
             Provider::firstOrCreate(['code' => $code], ['name' => $name, 'color' => $color]);
         }
         // Khả năng gateway ĐÃ làm được: text, web_search (mức nhẹ). Ảnh chưa làm nên để tắt, bật khi gateway hỗ trợ thật.
@@ -28,7 +28,7 @@ class SeedBaseline extends Command
         ] as [$code, $name, $desc, $risk, $handler, $on]) {
             Capability::firstOrCreate(['code' => $code], ['name' => $name, 'description' => $desc, 'risk_level' => $risk, 'handler' => $handler, 'enabled' => $on]);
         }
-        foreach ([['opus', 5, 'Tốn hạn mức nhất'], ['sonnet', 1, 'Mức chuẩn'], ['haiku', 0.25, 'Nhẹ'], ['grok-4.7', 1, null], ['gemini-4-neon-high', 1, null]] as [$m, $w, $n]) {
+        foreach ([['opus', 5, 'Tốn hạn mức nhất'], ['sonnet', 1, 'Mức chuẩn'], ['haiku', 0.25, 'Nhẹ'], ['grok-4.7', 1, null], ['gemini-4-neon-high', 1, null], ['gpt-6-luna', 1, null]] as [$m, $w, $n]) {
             ModelWeight::firstOrCreate(['model' => $m], ['weight' => $w, 'note' => $n]);
         }
         $this->info('Đã nạp dữ liệu tham chiếu: '.Provider::count().' hãng, '.Capability::count().' khả năng, '.ModelWeight::count().' trọng số.');

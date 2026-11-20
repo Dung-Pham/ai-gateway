@@ -1,13 +1,13 @@
 # Cổng AI — Bàn giao triển khai
 
 Dành cho: **quản lý hạ tầng (có quyền root)** sẽ cài Cổng AI lên server, và **người sở hữu các tài khoản AI** (làm các bước đăng nhập).
-Phiên bản mã: gateway/giao diện/runner 0.2.0. Ngày soạn: 19/11/2026.
+Phiên bản mã: gateway/giao diện/runner 0.2.0 (hỗ trợ Claude, Grok, Antigravity, Codex). Ngày soạn: 19/11/2026.
 
 > Cách đọc: mỗi bước ghi rõ **ai làm** — 🔒 = cần root, 👤 = người sở hữu tài khoản AI, 🔧 = người vận hành thường (không cần root). Các lệnh chạy từ thư mục gốc của kho (`/opt/aigw/ai-gateway` trong ví dụ).
 
 ## 0. Cổng AI là gì, gồm những gì
 
-Một hệ thống nhận yêu cầu AI từ các ứng dụng của công ty (SEO Studio trước), chạy chúng qua các gói CLI đăng ký (Claude, Grok, Antigravity) và trả lời theo chuẩn OpenAI. Có quản lý nhiều tài khoản, hạn mức theo ứng dụng, theo dõi sử dụng và giao diện quản trị tiếng Việt.
+Một hệ thống nhận yêu cầu AI từ các ứng dụng của công ty (SEO Studio trước), chạy chúng qua các gói CLI đăng ký (Claude, Grok, Antigravity, Codex/ChatGPT) và trả lời theo chuẩn OpenAI. Có quản lý nhiều tài khoản, hạn mức theo ứng dụng, theo dõi sử dụng và giao diện quản trị tiếng Việt.
 
 Mọi thứ chạy **trên MỘT máy riêng ("máy AI")** bằng Docker Compose:
 
@@ -56,6 +56,7 @@ Chuỗi: `đã viết mã → test giả lập đạt → tích hợp staging �
 | Chế độ TLS của Caddy (`WEB_MODE=tls`), luồng bật 2FA bằng mã | **CHƯA thử** |
 | Luật tường lửa mẫu `deploy/firewall/docker-user.sh.example` | **CHƯA thử** (cần root) |
 | Runner Grok/agy trong bộ triển khai mới | Đã sinh được đoạn Compose, **chưa chạy** (đã chạy bản cũ của bộ triển khai) |
+| Runner **Codex** (ChatGPT) | **Đã chạy CLI thật trong container runner cứng hóa** ngày 20/11/2026: gọi được, 6 đòn tấn công đều thất bại, hết phiên được nhận biết đúng. **Chưa** chạy trong bộ Compose đầy đủ cùng gateway, chưa thấy câu chữ lỗi hết hạn mức thật, chưa thấy CLI tự làm mới token. Chi tiết: `docs/KET_QUA_THAM_DO.md` Đợt 4 |
 | Nhiều tài khoản/lượng tải thật, chạy liên tục nhiều ngày, làm mới token CLI thật | **CHƯA** |
 | Staging, nghiệm thu bởi người dùng thật | **CHƯA** |
 
@@ -71,7 +72,7 @@ Mục tiêu của tài liệu này: để quản lý đưa lên server **không 
 
 **Mạng ra từ máy AI** (qua proxy của Cổng AI, không mở rộng hơn):
 - Khi cài: tải ảnh Docker (`php`, `node`, `composer`, `caddy`, `mariadb`, `python` từ registry), thư viện (`packagist.org`, `registry.npmjs.org`, `pypi.org`) lúc `build`.
-- Khi chạy: `api.anthropic.com:443` (Claude), `cli-chat-proxy.grok.com:443` (Grok), `daily-cloudcode-pa.googleapis.com:443` và `www.googleapis.com:443` (agy). Danh sách nằm ở `deploy/egress-allowlist.txt`; **chỉ thêm tên miền sau khi hiểu lý do**.
+- Khi chạy: `api.anthropic.com:443` (Claude), `cli-chat-proxy.grok.com:443` (Grok), `daily-cloudcode-pa.googleapis.com:443` và `www.googleapis.com:443` (agy), `chatgpt.com:443` (Codex) và `api.openai.com:443` (Codex, chỉ để nhận lỗi hết phiên nhanh). Danh sách nằm ở `deploy/egress-allowlist.txt`; **chỉ thêm tên miền sau khi hiểu lý do**.
 
 **Luồng mạng cần mở vào máy AI** (mọi thứ khác đóng):
 
@@ -101,8 +102,9 @@ Phiên bản và băm SHA-256 đã kiểm chứng nằm ở `runner/pins/version
 | Claude | 2.1.308 | `/opt/cli/claude` |
 | Grok | 1.0.70 | `/opt/cli/grok` |
 | Antigravity (`agy`) | 1.5.12 | `/opt/cli/agy` |
+| Codex (đăng nhập ChatGPT) | 0.163.0 | `/opt/cli/codex` |
 
-Cài bằng cách chính thức của hãng rồi chép tệp thực thi (binary đơn) tới `/opt/cli/<tên>` (`chmod 0555`, chủ sở hữu root). Rồi tính băm: `sha256sum /opt/cli/claude`. **Nếu băm khác dòng trong `versions.env`** (bản vá nhỏ của hãng) thì **dừng lại**: nâng phiên bản nghĩa là phải chạy lại bộ kiểm tra bảo mật (`runner/pins/README.md`) rồi mới đổi dòng ghim. Không tự ý bỏ qua. Chỉ cài hãng nào có tài khoản (không có Codex; Gemini CLI cá nhân đã bị Google ngừng, dùng `agy`).
+Cài bằng cách chính thức của hãng rồi chép tệp thực thi (binary đơn) tới `/opt/cli/<tên>` (`chmod 0555`, chủ sở hữu root). Rồi tính băm: `sha256sum /opt/cli/claude`. **Nếu băm khác dòng trong `versions.env`** (bản vá nhỏ của hãng) thì **dừng lại**: nâng phiên bản nghĩa là phải chạy lại bộ kiểm tra bảo mật (`runner/pins/README.md`) rồi mới đổi dòng ghim. Không tự ý bỏ qua. Chỉ cài hãng nào có tài khoản (Gemini CLI cá nhân đã bị Google ngừng, dùng `agy`).
 
 ### 3.3 🔧 Tạo bí mật và cấu hình (một lần)
 ```bash
@@ -144,7 +146,7 @@ Vào `APP_URL`, đăng nhập, **bật 2FA** (Menu người dùng → Hồ sơ c
 ### 3.6 👤 Đăng nhập tài khoản AI (người sở hữu làm; web KHÔNG nhận mật khẩu/token)
 Phiên đăng nhập là một **tệp token** trong `/opt/aigw/secrets/<nhãn>/auth/`. Lệnh sau chạy CLI **trong một container sạch** (không keychain, không D-Bus, quyền tối thiểu) và chỉ chép tệp token vào đúng thư mục auth của runner:
 ```bash
-scripts/aigw login claude claude-01      # hoặc: grok grok-01 | agy agy-01
+scripts/aigw login claude claude-01      # hoặc: grok grok-01 | agy agy-01 | codex codex-01
 ```
 Người sở hữu tài khoản **SSH vào máy AI có terminal** (`ssh -t`), chạy lệnh, mở đường dẫn CLI in ra **trên trình duyệt của chính mình**, đăng nhập (có 2FA), rồi dán mã vào terminal. CLI báo xong thì lệnh in `ĐÃ LƯU token`. Với `agy`: chọn "Google OAuth", đăng nhập xong thoát CLI (Ctrl+C hoặc `/quit`) để token được ghi.
 
@@ -153,6 +155,7 @@ Người sở hữu tài khoản **SSH vào máy AI có terminal** (`ssh -t`), c
 | Claude | `.credentials.json` | Lệnh bên trong: `claude auth login` |
 | Grok | `auth.json` | `grok login --device-code`; tài liệu CLI ghi token hết hạn sau 7 ngày, **chưa biết có tự làm mới không** |
 | Antigravity | `.gemini/antigravity-cli/antigravity-oauth-token` | Dùng **tài khoản Google riêng cho Cổng AI** (đường dẫn đăng nhập xin nhiều phạm vi quyền) |
+| Codex | `auth.json` | `codex login --device-auth` (mã thiết bị, không phải dán mã). Dùng tài khoản ChatGPT riêng cho Cổng AI. **Một lượt tốn khoảng 8.500 đến 13.000 token vào** kể cả câu hỏi ngắn |
 
 #### Server không có giao diện thì mở trình duyệt ở đâu?
 
@@ -282,8 +285,9 @@ Tạo `aigw-db-<giờ>.sql.gz` (CSDL) và `aigw-secrets-<giờ>.tar.gz.enc` (th�
 3. Runner khai báo qua tệp Compose (`gwctl new-runner` sinh sẵn); thêm tài khoản chưa làm được hoàn toàn từ giao diện, vì cần đăng nhập và quyền Docker.
 4. Chỉ văn bản và tìm web mức nhẹ. agy đưa prompt qua đối số dòng lệnh (giới hạn khoảng 100.000 byte).
 5. Giao diện và gateway **dùng chung một tài khoản CSDL** (`gateway`, đủ quyền trên `aigw`). Thiết kế muốn gateway chỉ đọc bảng chính sách và chỉ ghi `usage_events`; **chưa tách quyền**. Gateway chạy trong mạng nội bộ nên rủi ro thấp, nhưng chưa đạt thiết kế.
-6. `GATEWAY_CHECK_MODELS` mặc định có tên model của Grok/agy lấy từ đợt thăm dò; cần xác nhận khi dựng runner Grok/agy (đặt lại nếu sai).
-7. Container `gateway` nằm trong hai mạng nội bộ; cửa vào là Caddy. Nếu Caddy bị chiếm, đường tới gateway vẫn bị giới hạn ở `/v1/*` và `/healthz` trong cấu hình hiện hành, nhưng Caddy có đường ra internet: đừng đặt thêm bí mật vào `web`.
+6. **Codex:** các cờ tắt công cụ gắn với phiên bản **0.163.0**; công cụ không gỡ được khỏi danh sách, chỉ vô hiệu hóa cách chạy (lớp chính là container). Nâng phiên bản Codex phải chạy lại bài thử an ninh ở `KET_QUA_THAM_DO.md` Đợt 4. Chỉ khả năng `text`.
+7. `GATEWAY_CHECK_MODELS` mặc định có tên model của Grok/agy lấy từ đợt thăm dò; cần xác nhận khi dựng runner Grok/agy (đặt lại nếu sai).
+8. Container `gateway` nằm trong hai mạng nội bộ; cửa vào là Caddy. Nếu Caddy bị chiếm, đường tới gateway vẫn bị giới hạn ở `/v1/*` và `/healthz` trong cấu hình hiện hành, nhưng Caddy có đường ra internet: đừng đặt thêm bí mật vào `web`.
 
 ## 9. Kiểm tra sau khi cài (làm rồi ghi kết quả vào biên bản nghiệm thu)
 

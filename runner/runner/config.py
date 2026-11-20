@@ -2,7 +2,7 @@ import hashlib
 import os
 from dataclasses import dataclass, field
 
-PROVIDERS = ("claude", "grok", "agy")
+PROVIDERS = ("claude", "grok", "agy", "codex")
 
 
 @dataclass(frozen=True)

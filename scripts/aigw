@@ -35,7 +35,7 @@ case "$cmd" in
     login)
         # Đăng nhập tài khoản AI TRONG CONTAINER SẠCH (không keychain, không D-Bus): token chỉ ghi vào thư mục auth của runner.
         prov="${1:-}"; label="${2:-}"
-        [ -n "$prov" ] && [ -n "$label" ] || { echo "Dùng: aigw login <claude|grok|agy> <nhãn>" >&2; exit 2; }
+        [ -n "$prov" ] && [ -n "$label" ] || { echo "Dùng: aigw login <claude|grok|agy|codex> <nhãn>" >&2; exit 2; }
         sd="$(getenv SECRETS_DIR)"; sd="${sd:-./secrets}"; case "$sd" in /*) ;; *) sd="$PWD/$sd" ;; esac
         [ -d "$sd/$label/auth" ] || { echo "Chưa có $sd/$label/auth: chạy trước gwctl.py new-runner $sd $prov $label" >&2; exit 1; }
         ru="$(getenv RUNNER_UID)"; rg="$(getenv RUNNER_GID)"; ru="${ru:-10001}"; rg="${rg:-10001}"
@@ -43,7 +43,8 @@ case "$cmd" in
             claude) bin="$(getenv CLI_CLAUDE)"; name=claude; rel=".credentials.json"; run='CLAUDE_CONFIG_DIR=/tmp/h /opt/cli/claude auth login' ;;
             grok)   bin="$(getenv CLI_GROK)";   name=grok;   rel="auth.json";         run='GROK_HOME=/tmp/h /opt/cli/grok login --device-code' ;;
             agy)    bin="$(getenv CLI_AGY)";    name=agy;    rel=".gemini/antigravity-cli/antigravity-oauth-token"; run='/opt/cli/agy' ;;
-            *) echo "Hãng phải là claude|grok|agy" >&2; exit 2 ;;
+            codex)  bin="$(getenv CLI_CODEX)";  name=codex;  rel="auth.json";         run='CODEX_HOME=/tmp/h /opt/cli/codex login --device-auth' ;;
+            *) echo "Hãng phải là claude|grok|agy|codex" >&2; exit 2 ;;
         esac
         [ -x "$bin" ] || { echo "Không thấy CLI $bin (CLI_* trong .env)" >&2; exit 1; }
         echo "Sẽ đăng nhập $prov cho nhãn '$label'. Làm theo hướng dẫn của CLI (mở đường dẫn trên trình duyệt của BẠN, dán mã vào đây)."

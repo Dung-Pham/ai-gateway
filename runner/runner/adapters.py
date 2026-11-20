@@ -4,6 +4,9 @@
 - grok:   --tools ""/--sandbox KHÔNG đủ; phải --disallowed-tools với ĐỦ tên công cụ; nội dung hội thoại bị CLI lưu ra đĩa nên
           GROK_HOME là thư mục tạm xóa sau mỗi yêu cầu.
 - agy:    mặc định không tương tác tự từ chối công cụ (denied_actions); KHÔNG dùng --dangerously-skip-permissions và --mode plan.
+- codex:  MẶC ĐỊNH chạy được lệnh shell, đọc tệp bất kỳ và tìm web (đã thử thật 20/11/2026). Phải tắt từng tính năng; danh sách công cụ vẫn
+          còn nhưng gọi thì thất bại. Luồng sự kiện --json KHÔNG liệt kê mọi lượt gọi công cụ, nên không dựa vào đó để phát hiện: lớp chính
+          là container của runner. KHÔNG dùng --dangerously-bypass-approvals-and-sandbox.
 """
 import json
 import os
@@ -309,6 +312,77 @@ class AgyAdapter(Adapter):
         sync_back(os.path.join(ctx.home, self.token_relpath), os.path.join(self.cfg.auth_dir, self.token_relpath))
 
 
+# =============================================================================
+class CodexAdapter(Adapter):
+    """Codex CLI đăng nhập bằng tài khoản ChatGPT. Chỉ khả năng `text`.
+
+    Các cờ dưới đây đã thử THẬT với codex-cli 0.163.0 (docs/KET_QUA_THAM_DO.md, Đợt 4): bỏ bất kỳ cờ nào là mở lại một công cụ.
+    """
+    name = "codex"
+    token_relpath = "auth.json"
+    # Mỗi tính năng ở đây từng làm mô hình chạy được lệnh, đọc tệp, tìm web, gọi MCP/ứng dụng/trình duyệt hoặc sinh tác tử con.
+    DISABLE = ("shell_tool", "unified_exec", "apps", "plugins", "browser_use", "browser_use_external", "computer_use", "image_generation",
+               "view_image", "in_app_browser", "hooks", "skill_search", "goals", "memories", "tool_suggest", "sleep_tool", "multi_agent",
+               "multi_agent_v2", "code_mode_host", "code_mode_interrupt", "auth_elicitation", "tool_call_mcp_elicitation",
+               "skill_mcp_dependency_install", "collaboration_modes")
+
+    def max_prompt_bytes(self):
+        return self.cfg.max_body   # prompt đi qua stdin
+
+    def _chome(self, ctx):
+        return os.path.join(ctx.home, ".codex")
+
+    def prepare(self, ctx):
+        os.makedirs(self._chome(ctx), mode=0o700)
+        if not copy_secret(os.path.join(self.cfg.auth_dir, self.token_relpath), os.path.join(self._chome(ctx), self.token_relpath)):
+            raise RunnerError("auth_expired", "Chưa có token Codex trong volume xác thực.")
+
+    def command(self, ctx, req):
+        args = [self.cfg.cli_bin, "exec", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "--ignore-rules",
+                "--sandbox", "read-only", "--json", "-m", req["model"]]
+        for f in self.DISABLE:
+            args += ["--disable", f]
+        args += ["-c", 'web_search="disabled"', "-"]   # include_apply_patch_tool KHÔNG có tác dụng ở bản 0.163.0 (CLI báo bỏ qua); apply_patch bị chặn bởi --sandbox read-only
+        return args, compose(req.get("system", ""), req["user"]).encode("utf-8"), {"CODEX_HOME": self._chome(ctx)}
+
+    def parse(self, ctx, rc, out, err):
+        events = []
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    events.append(json.loads(line))
+                except ValueError:
+                    pass
+        # Lớp phụ: nếu luồng sự kiện LỘ một lượt dùng công cụ (lệnh, tìm web, sửa tệp, MCP...) thì ngắt mạch. Không đủ để làm lớp chính.
+        for e in events:
+            it = e.get("item") or {}
+            if e.get("type", "").startswith("item.") and it.get("type") not in (None, "agent_message", "reasoning", "error"):   # "error" chỉ là cảnh báo cấu hình của CLI
+                raise RunnerError("policy_violation", "Codex dùng công cụ ngoài danh sách cho phép: " + str(it.get("type"))[:40])
+        msgs = [e["item"].get("text") for e in events
+                if e.get("type") == "item.completed" and (e.get("item") or {}).get("type") == "agent_message" and isinstance(e["item"].get("text"), str)]
+        done = next((e for e in reversed(events) if e.get("type") == "turn.completed"), None)
+        if not msgs or done is None:
+            errs = " | ".join(str(e.get("message") or (e.get("error") or {}).get("message") or "") for e in events
+                              if e.get("type") in ("error", "turn.failed"))
+            msg = (errs or err or out)[:300]
+            low = msg.lower()
+            if "401" in low or "unauthorized" in low or "not logged in" in low or "sign in" in low or "log in" in low:
+                raise RunnerError("auth_expired", msg)
+            raise RunnerError("rate_limited" if looks_rate_limited(msg) else "upstream_error", "Codex không trả kết quả: " + msg)
+        text = msgs[-1]
+        if not text.strip():
+            raise RunnerError("upstream_error", "Codex không trả nội dung.")
+        u = done.get("usage") or {}
+        return {"text": text, "model": req_model(ctx),
+                "usage": _tokens(input_tokens=u.get("input_tokens"), output_tokens=u.get("output_tokens"),
+                                 cache_read_tokens=u.get("cached_input_tokens"), reasoning_tokens=u.get("reasoning_output_tokens")),
+                "cost_usd": None, "quota": {}, "denied_actions": [], "estimated": False}
+
+    def finish(self, ctx):
+        sync_back(os.path.join(self._chome(ctx), self.token_relpath), os.path.join(self.cfg.auth_dir, self.token_relpath))
+
+
 def make_adapter(cfg):
     if cfg.provider == "claude":
         return ClaudeAdapter(cfg)
@@ -320,4 +394,6 @@ def make_adapter(cfg):
         return GrokAdapter(cfg, names)
     if cfg.provider == "agy":
         return AgyAdapter(cfg)
+    if cfg.provider == "codex":
+        return CodexAdapter(cfg)
     raise SystemExit("Provider không hỗ trợ: " + cfg.provider)

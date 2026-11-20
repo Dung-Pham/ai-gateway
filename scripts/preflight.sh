@@ -31,7 +31,7 @@ fi
 [ -d runners.d ] && [ -n "$(ls runners.d/*.yml 2>/dev/null)" ] && ok "có runner: $(ls runners.d/*.yml | sed 's#.*/##;s#\.yml##' | tr '\n' ' ')" || bad "chưa có runner nào (gwctl.py new-runner)"
 
 echo "== CLI của hãng AI (gắn chỉ-đọc vào runner, ghim SHA-256)"
-for pair in CLAUDE:CLI_CLAUDE AGY:CLI_AGY GROK:CLI_GROK; do
+for pair in CLAUDE:CLI_CLAUDE AGY:CLI_AGY GROK:CLI_GROK CODEX:CLI_CODEX; do
     n="${pair%%:*}"; v="${pair##*:}"; p="$(getenv $v)"; h="$(getenv ${n}_SHA256)"
     [ -z "$p" ] && continue
     if [ -x "$p" ]; then

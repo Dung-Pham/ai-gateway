@@ -174,3 +174,70 @@ def test_khong_ho_tro_khai_nang_chua_lam(make_service):
 
 def test_agy_prompt_dai_qua_doi_so_bi_tu_choi(make_service):
     assert run(make_service("agy", max_prompt_bytes=100), model="m", user="x" * 200)[0] == 400
+
+
+# ---------------------------------------------------------------- Codex (định dạng sự kiện lấy từ codex-cli 0.163.0 thật)
+CODEX_REQ = {"model": "gpt-6-luna"}
+
+
+def test_codex_thanh_cong_co_usage(make_service):
+    code, b = run(make_service("codex"), **CODEX_REQ)
+    assert code == 200 and b["ok"] and b["text"] == "xin chào" and b["model"] == "gpt-6-luna"
+    assert b["usage"] == {"input_tokens": 12773, "output_tokens": 5, "cache_read_tokens": 10880, "reasoning_tokens": 0}
+    assert b["cost_usd"] is None and b["quota"] == {}
+
+
+def test_codex_args_cung_hoa(make_service):
+    svc = make_service("codex"); run(svc, **CODEX_REQ)
+    c = calls(svc)[0]; a = c["argv"]
+    assert a[0] == "exec" and a[-1] == "-"                                 # prompt đi qua stdin, không qua đối số
+    for flag in ("--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--json"):
+        assert flag in a
+    assert a[a.index("--sandbox") + 1] == "read-only"
+    disabled = {a[i + 1] for i, x in enumerate(a) if x == "--disable"}
+    # mỗi tính năng này từng mở lại một công cụ khi chạy Codex thật
+    assert {"shell_tool", "unified_exec", "apps", "plugins", "browser_use", "computer_use", "multi_agent", "code_mode_host", "image_generation"} <= disabled
+    cfg = [a[i + 1] for i, x in enumerate(a) if x == "-c"]
+    assert 'web_search="disabled"' in cfg
+    assert not any(x.startswith("--dangerously") or x in ("--oss", "--full-auto") for x in a)
+    assert "-m" in a and a[a.index("-m") + 1] == "gpt-6-luna"
+    assert c["env"]["CODEX_HOME"].endswith("/.codex")                       # trong HOME tạm, không phải thư mục thật
+
+
+def test_codex_het_phien_va_gioi_han(make_service):
+    code, b = run(make_service("codex"), user="@@AUTH", **CODEX_REQ)
+    assert not b["ok"] and b["error_class"] == "auth_expired"
+    code, b = run(make_service("codex"), user="@@LIMIT", **CODEX_REQ)
+    assert not b["ok"] and b["error_class"] == "rate_limited"
+
+
+def test_codex_chua_dang_nhap_khong_goi_cli(make_service):
+    svc = make_service("codex")
+    os.remove(svc.token)
+    code, b = run(svc, **CODEX_REQ)
+    assert b["error_class"] == "auth_expired" and calls(svc) == []
+
+
+def test_codex_lo_cong_cu_thi_ngat_mach(make_service):
+    svc = make_service("codex")
+    code, b = run(svc, user="@@TOOLS", **CODEX_REQ)
+    assert not b["ok"] and b["error_class"] == "policy_violation"
+    code, b = run(svc, **CODEX_REQ)
+    assert b["error_class"] == "tripped"       # ngắt mạch: từ chối mọi yêu cầu cho tới khi khởi động lại
+
+
+def test_codex_khong_co_ket_thuc_luot_la_loi(make_service):
+    code, b = run(make_service("codex"), user="@@NOTURN", **CODEX_REQ)
+    assert not b["ok"] and b["error_class"] == "upstream_error"
+
+
+def test_codex_token_lam_moi_duoc_ghi_nguoc_va_thu_muc_tam_bi_xoa(make_service):
+    svc = make_service("codex")
+    code, b = run(svc, user="@@REFRESH", **CODEX_REQ)
+    assert b["ok"] and "NEW-TOKEN-AFTER-REFRESH" in svc.token.read_text()
+    assert leftover(svc) == []
+
+
+def test_codex_chi_ho_tro_van_ban(make_service):
+    code, b = run(make_service("codex"), capability="web_search", **CODEX_REQ)
+    assert not b["ok"] and b["error_class"] == "unsupported"

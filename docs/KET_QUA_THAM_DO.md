@@ -246,3 +246,41 @@ Container mới, cùng volume token, với `--read-only`, `--cap-drop ALL`, `--s
 
 ## 7. Còn chưa làm với `agy`
 Tên miền cần ra ngoài (chưa ghi qua bộ ghi tên miền; **có cơ chế tự cập nhật** thử ghi tệp `.update_test…` cạnh tệp thực thi); cách **tắt tự cập nhật**; ảnh vào và ra; song song cùng volume; thử `disabledTools` và `permissions.deny`; nhiều tài khoản (mỗi tài khoản một volume, đã đủ cơ sở nhưng chưa thử với hai tài khoản Google).
+
+
+---
+
+# Đợt 4: Codex CLI (đăng nhập ChatGPT), 20/11/2026
+
+`codex-cli 0.163.0` (SHA-256 `399ff69c…c4215`), model `gpt-6-luna`. Dùng **bản sao** `auth.json` của app Codex của bạn (được bạn cho phép), trong `CODEX_HOME` và `HOME` riêng; bản thật ở `~/.codex` không bị sửa (so băm trước/sau). Khoảng 20 lượt nhỏ tính vào hạn mức ChatGPT của bạn. Một tài khoản, một model: chưa phải đánh giá thống kê.
+
+## 1. Mặc định KHÔNG an toàn
+`codex exec` với cờ tối thiểu, `--sandbox read-only`: mô hình **chạy được lệnh shell** (`id` ra uid thật), **đọc được tệp bất kỳ** (tệp mồi nằm ngoài thư mục làm việc bị đọc và in ra), và **tìm được web**. Chế độ "read-only" của Codex chỉ chặn GHI, không chặn ĐỌC. Codex còn nạp kỹ năng từ thư mục `~/.agents` thật của người dùng nếu `HOME` thật bị lộ cho nó (thấy trong `codex debug prompt-input`): vì vậy runner đặt `HOME` tạm.
+
+## 2. Cách tắt (đã thử thật)
+- `--disable <tính năng>` cho 24 tính năng liên quan công cụ (xem `CodexAdapter.DISABLE`) cộng `-c web_search="disabled"`: mô hình **không còn chạy được lệnh, đọc tệp hay tìm web** (kiểm tra bằng hành vi, không chỉ lời khai).
+- **Công cụ không biến mất khỏi danh sách**: mô hình vẫn khai có `exec`, `apply_patch`, `spawn_agent`, `list_mcp_resources`, `clock__curr_time`... nhưng gọi thì thất bại: `exec` báo "code-mode host is disabled ... fail closed"; `apply_patch` bị `--sandbox read-only` từ chối ("writing is blocked"); `clock__curr_time` chạy được (chỉ trả giờ, vô hại). **Không có cách gỡ hẳn định nghĩa công cụ** đã tìm thấy.
+- `-c include_apply_patch_tool=false` **bị CLI bỏ qua** ("unrecognized configuration setting"): không dùng.
+- **Luồng sự kiện `--json` KHÔNG liệt kê mọi lượt gọi công cụ** (các lượt `exec`/`apply_patch`/`clock` không hiện thành `item`). Vì vậy runner chỉ dùng luồng sự kiện làm lớp phụ (gặp `command_execution`, `web_search`... thì ngắt mạch); **lớp chính là container của runner**.
+- Cờ nguy hiểm không dùng: `--dangerously-bypass-approvals-and-sandbox`, `--full-auto`, `--oss`.
+
+## 3. Trong container runner cứng hóa (hệ tệp chỉ đọc, bỏ mọi capability, mạng chỉ qua proxy)
+- Codex thật chạy được (`--sandbox read-only` không cần bubblewrap để khởi động), 4 đến 6 giây cho một câu trả lời ngắn.
+- **Thử tấn công qua runner (1 lượt gồm 6 việc)**: chạy `id`/`ls`, đọc `/auth/auth.json` và `/run/secrets/runner_secret`, đọc `$CODEX_HOME/auth.json`, ghi `/tmp/pwned.txt`, tải `https://example.com`, tìm web. **Cả 6 thất bại**; không có tệp nào được tạo; proxy chỉ thấy `chatgpt.com`; token không đổi.
+- Chỉ **một** lần thử như vậy (một lời nhắc, một model); chưa thử các biến thể tấn công khác.
+
+## 4. Mạng
+- Lượt gọi thật chỉ cần `chatgpt.com:443`. `ab.chatgpt.com:443` (đo đạc/thử nghiệm A/B) bị chặn mà vẫn chạy: CỐ Ý không cho phép.
+- Khi hết phiên Codex chuyển sang `api.openai.com` (WebSocket). Nếu proxy chặn, Codex **thử lại khoảng 37 lần, treo hơn 200 giây** rồi mới hết giờ, và runner báo `timeout` thay vì `auth_expired`. Cho phép riêng `api.openai.com:443` thì nhận 401 sau 16 giây và runner báo đúng `auth_expired`. Đã thêm vào `egress-allowlist.txt` kèm giải thích.
+
+## 5. Định dạng và số liệu
+- Sự kiện thật: `thread.started` → (các `item.completed` kiểu `error` là cảnh báo cấu hình, không phải dùng công cụ) → `turn.started` → `item.completed` kiểu `agent_message` → `turn.completed` có `usage {input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens}`.
+- Chi phí nền lớn: **khoảng 8.500 đến 13.000 token vào cho mỗi lượt, kể cả khi chỉ trả lời "ok"** (định nghĩa công cụ và hướng dẫn hệ thống của CLI). Cần tính khi so với hạn mức.
+- Gọi bằng stdin (`-`): nếu truyền lời nhắc dạng đối số mà stdin vẫn mở, CLI **chờ mãi** ("Reading additional input from stdin").
+- Codex không báo % hạn mức: `quota` luôn rỗng, chưa có nguồn đo.
+
+## 6. Chưa biết / chưa thử (nói thẳng)
+- **Câu chữ lỗi hết hạn mức (429/usage limit) CHƯA quan sát thật**: test dùng câu đoán; phân loại `rate_limited` dựa vào từ khóa chung (`usage limit`, `429`, `rate limit`...), có thể sót.
+- **Chưa thấy CLI tự làm mới token** (token còn hạn đến 22/11; bản sao không đổi). Đường ghi ngược token chỉ được test bằng CLI giả.
+- Chưa thử `web_search` của Codex làm khả năng riêng (đã tắt; runner chỉ hỗ trợ `text`), chưa thử ảnh, chưa thử model khác ngoài `gpt-6-luna`, chưa thử đồng thời nhiều lượt, chưa thử bài dài.
+- Bộ cờ gắn với **phiên bản 0.163.0**: nâng phiên bản phải chạy lại bài thử mục 1 và 2 (Codex đang thêm tính năng mới liên tục; tính năng mới mặc định bật có thể mở lại công cụ).

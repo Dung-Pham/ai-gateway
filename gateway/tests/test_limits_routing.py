@@ -286,3 +286,15 @@ def test_kiem_tra_ngay_that_bai_dat_co_va_khong_ghi_usage(env):
     env.runner.script["grok-01"] = [env.runner.fail("rate_limited", quota={"five_hour": {"utilization": 1, "resets_at": 4_000_000_000}})]
     assert env.client.post("/internal/accounts/grok-01/check", headers=h).json()["error_class"] == "rate_limited"
     assert env.client.get("/internal/state", headers=h).json()["accounts"]["grok-01"]["cooldown_s"] > 0
+
+
+# ---------------------------------------------------------------- hãng Codex
+def test_codex_la_hang_hop_le_va_van_bi_chinh_sach_model_chan(env):
+    r = env.post(model="codex:gpt-6-luna")
+    assert r.status_code == 403 and r.json()["error"]["code"] == "model_not_allowed"   # qua được kiểm tra hãng (trước đây 404 model_not_found); App A chỉ cho haiku/sonnet/grok
+    assert env.post(model="khong-co:gpt-6-luna").status_code == 404
+
+
+def test_kiem_tra_ngay_dung_model_re_cua_codex():
+    from gateway.config import Settings
+    assert Settings(database_url="x", key_pepper="p" * 20).check_models["codex"] == "gpt-6-luna"

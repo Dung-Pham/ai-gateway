@@ -16,7 +16,7 @@ class Settings:
     runner_host_regex: str = r"^runner-[a-z0-9]+(-[a-z0-9]+)*$"   # SSRF: chỉ gọi tên máy runner nội bộ
     allow_runner_port_min: int = 1024
     search_model: str = "haiku"           # model mặc định cho /v1/search (việc nhẹ: dùng model nhỏ để dành hạn mức)
-    check_models: dict = field(default_factory=lambda: {"claude": "haiku", "grok": "grok-4.7", "agy": "gemini-4-neon-high"})   # model rẻ nhất để "Kiểm tra ngay"
+    check_models: dict = field(default_factory=lambda: {"claude": "haiku", "grok": "grok-4.7", "agy": "gemini-4-neon-high", "codex": "gpt-6-luna"})   # model rẻ nhất để "Kiểm tra ngay"
 
     @staticmethod
     def from_env(env=os.environ) -> "Settings":
@@ -44,7 +44,7 @@ class Settings:
 
 def _check_models(raw):
     """GATEWAY_CHECK_MODELS="claude=haiku,grok=...,agy=..." ghi đè mặc định."""
-    out = {"claude": "haiku", "grok": "grok-4.7", "agy": "gemini-4-neon-high"}
+    out = {"claude": "haiku", "grok": "grok-4.7", "agy": "gemini-4-neon-high", "codex": "gpt-6-luna"}
     for part in (raw or "").split(","):
         if "=" in part:
             k, v = part.split("=", 1)

@@ -127,6 +127,9 @@ Kiểm tra nguồn của bài ở gateway: NHS, MedlinePlus, Cleveland Clinic, V
 
 Phát hiện vận hành: systemd người dùng **không thực thi** `IPAddressDeny=`/`IPAddressAllow=` (cần quyền BPF của dịch vụ cấp hệ thống), nên không dùng làm lớp chặn cho cầu nối cũ; thay bằng bỏ WebFetch khỏi cầu nối cũ và dùng egress proxy của gateway.
 
+## Codex (20/11/2026)
+Runner có thêm hãng `codex` (đăng nhập ChatGPT), chỉ khả năng `text`. Đã chạy CLI thật trong container cứng hóa và thử tấn công; bộ cờ, kết quả và điều chưa biết ở `docs/KET_QUA_THAM_DO.md` Đợt 4. Gateway nhận tiền tố `codex:` (ví dụ `codex:gpt-6-luna`).
+
 ## Giới hạn đã biết (nói thẳng)
 1. **Chỉ văn bản và tìm web mức nhẹ.** Chưa có stream, ảnh vào/ra, tìm web đầy đủ (`WebFetch`). Gateway trả `stream_not_supported` / `capability_not_supported` cho phần chưa có.
 2. **Một tiến trình gateway**; cooldown, tài khoản hết phiên, bộ đếm rpm nằm trong bộ nhớ, mất khi khởi động lại. Muốn mở rộng phải chuyển sang Redis.

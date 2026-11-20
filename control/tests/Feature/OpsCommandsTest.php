@@ -16,7 +16,7 @@ class OpsCommandsTest extends TestCase
     public function test_seed_baseline_idempotent_va_khong_ghi_de_sua_doi(): void
     {
         $this->artisan('gateway:seed-baseline')->assertExitCode(0);
-        $this->assertSame(['agy', 'claude', 'grok'], Provider::orderBy('code')->pluck('code')->all());
+        $this->assertSame(['agy', 'claude', 'codex', 'grok'], Provider::orderBy('code')->pluck('code')->all());
         $this->assertTrue(Capability::where('code', 'web_search')->first()->enabled);
         $this->assertFalse(Capability::where('code', 'image_out')->first()->enabled);
         Capability::where('code', 'image_in')->update(['enabled' => true, 'name' => 'Ảnh (đã sửa)']);
