@@ -154,6 +154,58 @@ Người sở hữu tài khoản **SSH vào máy AI có terminal** (`ssh -t`), c
 | Grok | `auth.json` | `grok login --device-code`; tài liệu CLI ghi token hết hạn sau 7 ngày, **chưa biết có tự làm mới không** |
 | Antigravity | `.gemini/antigravity-cli/antigravity-oauth-token` | Dùng **tài khoản Google riêng cho Cổng AI** (đường dẫn đăng nhập xin nhiều phạm vi quyền) |
 
+#### Server không có giao diện thì mở trình duyệt ở đâu?
+
+**Không mở trình duyệt trên server.** Trình duyệt chạy trên **máy của người sở hữu tài khoản** (laptop). Server chỉ in ra một đường dẫn đăng nhập và chờ; người sở hữu đăng nhập trên laptop, lấy mã, rồi dán mã vào terminal đang SSH vào server.
+
+```mermaid
+sequenceDiagram
+    actor U as Người sở hữu tài khoản
+    participant L as Laptop (có trình duyệt)
+    participant S as Máy AI (SSH, không giao diện)
+    participant H as Trang đăng nhập của hãng
+    U->>S: ssh -t aigw@máy-AI
+    U->>S: scripts/aigw login claude claude-01
+    S-->>U: in ĐƯỜNG DẪN đăng nhập và chờ mã
+    U->>L: sao chép đường dẫn, mở trên trình duyệt
+    L->>H: đăng nhập (mật khẩu + 2FA)
+    H-->>L: hiện MÃ xác nhận
+    U->>S: dán mã vào terminal, Enter
+    S-->>U: "ĐÃ LƯU token vào thư mục auth"
+    U->>S: giao diện > Tài khoản AI > Kiểm tra ngay
+```
+
+**Chuẩn bị trước khi làm (người sở hữu tài khoản):**
+- Một laptop có trình duyệt và **điện thoại/ứng dụng nhận mã 2FA** của tài khoản AI.
+- Quyền SSH vào máy AI với người dùng `aigw` (quản lý cấp).
+- Tài khoản AI **dành riêng cho Cổng AI** (không dùng tài khoản lập trình hằng ngày), đã đăng ký gói cần dùng.
+- Quản lý đã chạy `gwctl.py new-runner` cho nhãn đó (mục 3.4) để có thư mục `auth`.
+
+**Từng bước:**
+1. **SSH có terminal**: `ssh -t aigw@<địa-chỉ-máy-AI>`. Cờ `-t` bắt buộc, vì CLI cần terminal để hiện đường dẫn và nhận mã. Nên chạy trong `tmux` (`tmux new -s login`) để đường dẫn dài không bị rớt khi mất kết nối.
+2. **Chạy lệnh**: `cd /opt/aigw/ai-gateway && scripts/aigw login <claude|grok|agy> <nhãn>`.
+3. **Chờ CLI in đường dẫn.** Với `agy`, chọn "Google OAuth" trong menu. Với Grok, CLI in thêm một **mã thiết bị** ngắn.
+4. **Sao chép đường dẫn sang trình duyệt trên laptop.** Đường dẫn rất dài; hãy dùng cửa sổ terminal đủ rộng, chọn cả đường dẫn bằng chuột (không gõ lại tay), và **kiểm tra còn đủ tham số ở cuối** trước khi mở. Đường dẫn bị cụt (thiếu `response_type`...) sẽ báo lỗi `invalid_request` hoặc "Required parameter is missing": đây là lỗi đã gặp khi thăm dò.
+5. **Đăng nhập trên trình duyệt** bằng tài khoản AI (mật khẩu và 2FA). Trang cuối hiện một **mã**.
+   - Claude và agy: **sao chép mã, dán vào terminal**, Enter.
+   - Grok (`--device-code`): mở trang chỉ định trên laptop và **nhập mã thiết bị** terminal đã in, không phải dán mã ngược lại.
+6. Khi thành công, lệnh in `ĐÃ LƯU token vào thư mục auth`. Với `agy`, **thoát CLI** (Ctrl+C hoặc `/quit`) để token được ghi ra tệp.
+7. Vào giao diện, **Tài khoản AI → <nhãn> → Kiểm tra ngay**. "Đạt" thì tài khoản chuyển "Sẵn sàng".
+
+**Không dán mã xác nhận hay token vào chat, ticket hay email.** Mã chỉ dùng được một lần và chỉ gõ vào terminal đang chờ.
+
+**Nếu không chạy được:**
+| Hiện tượng | Nguyên nhân thường gặp | Cách làm |
+|---|---|---|
+| `the input device is not a TTY` | SSH không có `-t` | Thoát và SSH lại bằng `ssh -t` |
+| Trang Google/hãng báo thiếu tham số hoặc `invalid_request` | Đường dẫn bị cụt khi sao chép | Chọn lại toàn bộ đường dẫn, dùng terminal rộng hơn hoặc `tmux` |
+| Lệnh thoát sau khoảng 60 giây, báo `authentication failed or timed out` | Chạy `agy` ở chế độ không tương tác | Dùng đúng `scripts/aigw login agy <nhãn>` (chế độ tương tác) |
+| In `KHÔNG thấy tệp token` | Đăng nhập chưa hoàn tất hoặc thoát CLI quá sớm | Chạy lại; với `agy` nhớ thoát CLI sau khi đăng nhập |
+| "Kiểm tra ngay" vẫn "Hết phiên" | Token chưa lưu đúng thư mục hoặc sai quyền | Xem `ls -la <SECRETS_DIR>/<nhãn>/auth` (tệp thuộc `RUNNER_UID`, quyền 600) |
+| CLI không cho đăng nhập kiểu này | Hãng đổi cách đăng nhập | **Dừng và báo lại** (ghi vào issue), không tìm đường vòng |
+
+**Về hình ảnh minh họa:** tài liệu này **chưa có ảnh chụp màn hình thật** của từng bước, vì đăng nhập thật cần tài khoản và mã 2FA của người sở hữu nên tôi không tự chụp được. Sơ đồ ở trên là sơ đồ luồng. Khi người sở hữu đăng nhập lần đầu, hãy chụp từng bước (che mã và đường dẫn) rồi thêm vào `docs/images/` và liên kết ở đây.
+
 **Đừng đăng nhập CLI ngay trên máy cá nhân rồi chép token sang.** Đã quan sát: `agy` trên máy có keychain dùng keychain chung của người dùng hệ điều hành (không tách theo `HOME`), nên có thể lấy nhầm tài khoản cá nhân và không tạo tệp token. Quy tắc chung: không dán mã xác thực hay token vào chat/ticket/email; dùng tài khoản riêng cho Cổng AI, tách khỏi tài khoản lập trình hằng ngày.
 
 **Mức kiểm chứng của `aigw login`:** đường ống (tạo container, chạy CLI, chép token, quyền tệp 0600) **đã chạy thử với CLI giả**. **Chưa chạy với đăng nhập thật** của cả ba hãng trong container này (lúc thăm dò, agy đã đăng nhập được trong container sạch bằng cách dán mã; Claude/Grok đã đăng nhập bằng thư mục cấu hình riêng). Nếu CLI nào không cho đăng nhập kiểu này, báo lại để xử lý, đừng tìm đường vòng.
