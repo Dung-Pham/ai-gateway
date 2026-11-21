@@ -59,4 +59,18 @@ class TwoFactorTest extends TestCase
         $u = $this->userWith2fa();
         $this->assertCount(8, $u->two_factor_recovery_codes);
     }
+
+    public function test_lenh_mo_khoa_tat_2fa_va_ghi_nhat_ky(): void
+    {
+        $u = $this->userWith2fa();
+        $this->assertTrue($u->hasConfirmedTwoFactor());
+        $this->artisan('gateway:disable-2fa', ['email' => 'A@T.test'])->expectsConfirmation('Tắt 2FA của a@t.test? Hãy chắc chắn đã xác minh danh tính người này (gọi điện, gặp trực tiếp).', 'no')->assertExitCode(1);
+        $this->assertTrue($u->refresh()->hasConfirmedTwoFactor(), 'hủy thì không đổi gì');
+        $this->artisan('gateway:disable-2fa', ['email' => 'a@t.test', '--yes' => true])->assertExitCode(0);
+        $u->refresh();
+        $this->assertFalse($u->hasConfirmedTwoFactor());
+        $this->assertNull($u->two_factor_secret);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'user.2fa_reset', 'subject' => 'a@t.test']);
+        $this->artisan('gateway:disable-2fa', ['email' => 'khong@co.test', '--yes' => true])->assertExitCode(1);
+    }
 }

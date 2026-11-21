@@ -144,6 +144,29 @@ scripts/aigw create-admin ten@congty.example   # hỏi mật khẩu tại chỗ 
 ```
 Vào `APP_URL`, đăng nhập, **bật 2FA** (Menu người dùng → Hồ sơ của tôi): quét mã QR bằng ứng dụng Authenticator (Google Authenticator, Microsoft Authenticator, Authy...), **lưu 8 mã khôi phục ở nơi an toàn** (mất điện thoại mà không có mã khôi phục thì phải nhờ quản trị khác tắt 2FA hộ). Với `REQUIRE_2FA=true` hệ thống bắt buộc mọi người dùng bật. Giao diện này điều khiển cả việc đăng nhập các tài khoản AI nên **nên coi 2FA là bắt buộc**.
 
+### 3.5a 🔧 Bật xác thực hai bước (2FA) bằng ứng dụng Authenticator — bắt buộc
+
+Giao diện này điều khiển đăng nhập các tài khoản AI, cấp khóa API và dừng khẩn cấp, nên **mọi người dùng phải bật 2FA**.
+
+**Quản lý (một lần):**
+1. Trong `deploy/.env` đặt `REQUIRE_2FA=true` (mặc định trong tệp mẫu và trong Compose). Nếu mới đổi: `scripts/aigw up` để tạo lại giao diện.
+2. Giữ đồng hồ máy chủ đồng bộ NTP (mã TOTP đổi mỗi 30 giây, lệch giờ vài phút thì mã đúng cũng bị báo sai; `scripts/aigw preflight` có kiểm tra).
+3. Hạn chế nơi được vào giao diện: `ADMIN_ALLOWED_CIDRS` (hoặc đặt sau VPN). 2FA là lớp thứ hai, không thay cho việc không phơi giao diện ra internet.
+
+**Từng người dùng (lần đăng nhập kế tiếp):**
+1. Đăng nhập bằng mật khẩu: hệ thống tự chuyển tới **Hồ sơ của tôi** (`/my-profile`) và **chưa cho dùng trang nào khác** cho tới khi bật xong.
+2. Mở Google Authenticator (hoặc Microsoft Authenticator, Authy), chọn thêm tài khoản, **quét mã QR**, nhập mã 6 số đang hiện để xác nhận.
+3. **Lưu 8 mã khôi phục** ở nơi an toàn (trình quản lý mật khẩu), mỗi mã dùng một lần.
+4. Từ đó mỗi lần đăng nhập nhập thêm mã 6 số (đổi mỗi 30 giây).
+
+**Mất điện thoại:** đăng nhập, ở bước nhập mã chọn **dùng mã khôi phục**. Mất cả mã khôi phục thì quản lý chạy trên máy AI (đã xác minh danh tính người đó):
+```bash
+scripts/aigw artisan gateway:disable-2fa email@congty.example --yes
+```
+Lệnh chỉ chạy được trên server (không có trong giao diện web, nên kẻ chiếm một tài khoản qua web không tắt được 2FA của người khác) và ghi nhật ký `user.2fa_reset`. Người đó đăng nhập bằng mật khẩu rồi bật lại.
+
+**Mức kiểm chứng:** test tự động đã chứng minh: người chưa bật bị chuyển về `/my-profile` và không vào được trang khác khi `REQUIRE_2FA=true`; mã TOTP đúng chuẩn (6 số, 30 giây, khóa Base32) được nhận, mã sai bị từ chối; lệnh mở khóa hoạt động. **Chưa thử** quét QR và đăng nhập bằng mã trên trình duyệt thật với ứng dụng Authenticator thật.
+
 ### 3.6 👤 Đăng nhập tài khoản AI (người sở hữu làm; web KHÔNG nhận mật khẩu/token)
 Phiên đăng nhập là một **tệp token** trong `/opt/aigw/secrets/<nhãn>/auth/`. Lệnh sau chạy CLI **trong một container sạch** (không keychain, không D-Bus, quyền tối thiểu) và chỉ chép tệp token vào đúng thư mục auth của runner:
 ```bash
