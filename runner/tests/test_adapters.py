@@ -247,3 +247,38 @@ def test_claude_token_oauth_het_han_khong_lam_moi_duoc_la_het_phien_chu_khong_ph
     # Thông báo thật khi proxy chặn platform.claude.com nên CLI không làm mới được token
     code, b = run(make_service("claude"), user="@@EXPIRED")
     assert not b["ok"] and b["error_class"] == "auth_expired"
+
+
+def test_claude_thong_diep_that_token_bi_thu_hoi_la_het_phien(make_service):
+    # Thông điệp THẬT đã thấy khi proxy chặn platform.claude.com (21/11/2026)
+    from runner.errors import looks_auth_expired
+    assert looks_auth_expired("Failed to authenticate: OAuth token revoked. Please log in again or contact your administrator.")
+    assert not looks_auth_expired("Overloaded, please retry")
+
+
+def test_claude_chi_mot_luot_lam_moi_token_tai_mot_thoi_diem(make_service):
+    """Mã làm mới bị xoay: hai lượt cùng thấy token hết hạn phải chạy lần lượt, lượt sau thấy token mới của lượt trước."""
+    import json as _json
+    import threading
+    import time as _time
+    svc = make_service("claude")
+    svc.token.write_text(_json.dumps({"claudeAiOauth": {"accessToken": "OLD", "refreshToken": "R1", "expiresAt": int((_time.time() - 3600) * 1000)}}))
+    out = {}
+
+    def go(k, user, delay):
+        _time.sleep(delay)
+        out[k] = run(svc, user=user)[1]
+    a = threading.Thread(target=go, args=("a", "@@REFRESH @@PAUSE", 0)); b = threading.Thread(target=go, args=("b", "chao", 0.25))
+    a.start(); b.start(); a.join(); b.join()
+    assert out["a"]["ok"] and out["b"]["ok"]
+    seen = [_json.loads(l) for l in open(str(svc.log) + ".seen").read().splitlines()]
+    assert "OLD" in seen[0] and "NEW-TOKEN-AFTER-REFRESH" in seen[1]     # lượt hai chờ, rồi đọc token mới đã ghi ngược
+
+
+def test_claude_token_con_han_thi_khong_chan_nhau(make_service):
+    import json as _json
+    import time as _time
+    svc = make_service("claude")
+    svc.token.write_text(_json.dumps({"claudeAiOauth": {"accessToken": "A", "refreshToken": "R", "expiresAt": int((_time.time() + 7200) * 1000)}}))
+    assert svc.adapter._token_near_expiry() is False
+    assert run(svc)[1]["ok"]

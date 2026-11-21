@@ -47,6 +47,11 @@ def search_rows():
 
 if prov == "claude":
     cfg = os.environ.get("CLAUDE_CONFIG_DIR", "")
+    if os.environ.get("STUB_LOG"):   # token mà CLI thấy lúc bắt đầu (để test khóa làm mới)
+        try: seen = open(os.path.join(cfg, ".credentials.json")).read()[:80]
+        except OSError: seen = ""
+        open(os.environ["STUB_LOG"] + ".seen", "a").write(json.dumps(seen) + "\n")
+    if has("@@PAUSE"): time.sleep(0.8)
     refresh(os.path.join(cfg, ".credentials.json"))
     tools_arg = argv[argv.index("--tools") + 1]
     if tools_arg == "WebSearch":

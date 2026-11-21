@@ -214,6 +214,8 @@ sequenceDiagram
 **Mức kiểm chứng của `aigw login`:** đường ống (tạo container, chạy CLI, chép token, quyền tệp 0600) **đã chạy thử với CLI giả**. **Chưa chạy với đăng nhập thật** của cả ba hãng trong container này (lúc thăm dò, agy đã đăng nhập được trong container sạch bằng cách dán mã; Claude/Grok đã đăng nhập bằng thư mục cấu hình riêng). Nếu CLI nào không cho đăng nhập kiểu này, báo lại để xử lý, đừng tìm đường vòng.
 Khi hết phiên giao diện hiện "Hết phiên" và cảnh báo; chạy lại lệnh trên rồi bấm "Kiểm tra ngay".
 
+**Claude tự làm mới token** (access sống khoảng 8 giờ) nhưng **mã làm mới có hạn tuyệt đối** (lần thấy: đến 15/12/2026, không dài thêm sau mỗi lần làm mới), nên **phải đăng nhập lại định kỳ, khoảng vài tuần**. Đặt nhắc lịch cho người sở hữu tài khoản. Mỗi tài khoản chỉ nên đăng nhập ở **một nơi**: mã làm mới bị xoay, một bản sao token ở nơi khác sẽ mất hiệu lực.
+
 ### 3.7 🔧 Thêm tài khoản vào giao diện và kiểm tra
 Giao diện → **Tài khoản AI → Thêm**: nhãn `claude-01`, hãng, gói, số lượt song song (khởi đầu 2), địa chỉ runner `http://runner-claude-01:8800`. Tài khoản mới ở trạng thái "Chờ đăng nhập". Mở trang tài khoản → **Kiểm tra ngay**: gateway gọi một lượt rất nhỏ qua runner; đạt thì chuyển "Sẵn sàng" và hiện % hạn mức (Claude). Rồi: **Định tuyến** → tạo pool (nhóm tài khoản) và thêm tài khoản; **Ứng dụng → Thêm** (xem mục 4).
 

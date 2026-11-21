@@ -295,3 +295,11 @@ Tên miền cần ra ngoài (chưa ghi qua bộ ghi tên miền; **có cơ chế
 **Vì sao các đợt thăm dò trước không thấy:** mỗi lần quan sát ngắn hơn hạn của token, CLI chưa cần làm mới. Đây là **lỗ hổng của danh sách tên miền** do quan sát không đủ lâu, không phải do người vận hành.
 **Lỗi thứ hai của runner:** thông báo trên không chứa "not logged in" hay "/login" nên bị xếp là `upstream_error` (502) thay vì `auth_expired` (giao diện không hiện "Hết phiên", không có cảnh báo). Đã sửa (`looks_auth_expired`, có test).
 **Còn phải kiểm chứng:** CLI có thật sự làm mới được và ghi token mới ngược vào volume (đường `sync_back`) sau khi mở `platform.claude.com`: chưa từng thấy lần làm mới thật nào. `auth.openai.com` (Codex) và `oauth2.googleapis.com` (agy) mới suy ra từ chuỗi trong tệp thực thi. Grok: chưa xác định địa chỉ làm mới.
+
+## Thử THẬT làm mới token trong runner cứng hóa (21/11/2026, máy dev)
+Ép làm mới bằng token đã hết hạn access, trong container runner thật (hệ tệp chỉ đọc, mạng chỉ qua proxy):
+- **Proxy chặn `platform.claude.com`** (đúng như server): Claude trả **"Failed to authenticate: OAuth token revoked. Please log in again or contact your administrator."**; proxy ghi 8 lần chặn. Thông điệp này không có trong danh sách nhận biết ban đầu của tôi, nên vẫn bị xếp 502: đã thêm vào `AUTH_HINTS` (có test).
+- **Proxy cho phép `platform.claude.com`:** lượt gọi **thành công** (4,3 giây); proxy thấy đúng **1** lần `platform.claude.com`; token mới **được ghi ngược vào volume** (`sync_back` chạy với CLI thật lần đầu): access mới sống **8 giờ**.
+- **Mã làm mới bị XOAY** mỗi lần làm mới (hai giá trị khác nhau trước/sau). Hệ quả: một bản sao token cũ của cùng tài khoản **mất hiệu lực** sau khi nơi khác làm mới (đã gặp: bản sao trong stack bị báo "revoked"). Mỗi tài khoản chỉ nên nằm ở MỘT nơi.
+- **Ngày hết hạn của mã làm mới không đổi sau khi làm mới** (15/12/2026 cả trước và sau, **chỉ một mẫu**): có vẻ cố định từ lúc đăng nhập, nghĩa là **phải đăng nhập lại định kỳ** (khoảng vài tuần), tự làm mới không thay được. Chu kỳ chính xác chưa biết.
+- **Khóa làm mới:** vì mã bị xoay, runner Claude nay chỉ cho **một** lượt chạy tại một thời điểm khi token còn dưới 5 phút (các lượt khác chờ rồi đọc token mới đã ghi ngược). Có test với CLI giả; **chưa thử** cuộc đua thật (thử có thể làm hỏng mã làm mới của tài khoản đang dùng).

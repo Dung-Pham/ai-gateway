@@ -30,8 +30,9 @@ LIMIT_HINTS = ("rate limit", "usage limit", "session limit", "hit your", "overlo
 
 # Dấu hiệu hết phiên đăng nhập. Thông báo THẬT của Claude CLI 2.1.308 khi token OAuth hết hạn mà không làm mới được:
 # "OAuth token expired and refresh failed (re-login required)" (không chứa "/login" nên trước đây bị xếp nhầm là lỗi chung, hiện 502).
-AUTH_HINTS = ("not logged in", "/login", "re-login", "login required", "oauth token expired", "token has expired",
-              "authentication_error", "401 unauthorized", "not signed in")
+# Thông điệp THẬT đã thấy ở Claude CLI 2.1.308 khi proxy chặn việc làm mới: "Failed to authenticate: OAuth token revoked. Please log in again or contact your administrator."
+AUTH_HINTS = ("not logged in", "/login", "re-login", "login required", "oauth token expired", "token has expired", "token revoked",
+              "log in again", "please log in", "failed to authenticate", "authentication_error", "401 unauthorized", "not signed in")
 
 
 def looks_auth_expired(text: str) -> bool:

@@ -11,6 +11,8 @@
 import json
 import os
 import re
+import threading
+import time
 
 from .context import copy_secret, sync_back
 from . import search as S
@@ -97,12 +99,32 @@ class ClaudeAdapter(Adapter):
     capabilities = {"text", "web_search"}
     token_relpath = ".credentials.json"
 
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        # Mã làm mới của Claude bị XOAY mỗi lần làm mới (đã thấy thật 21/11/2026). Hai lượt cùng thấy token hết hạn và cùng làm mới
+        # có thể làm mã của nhau mất hiệu lực. Nên khi token sắp hết hạn, chỉ một lượt được chạy tại một thời điểm.
+        self._refresh_lock = threading.Lock()
+
     def _cfgdir(self, ctx):
         return os.path.join(ctx.home, ".claude")
 
+    def _token_near_expiry(self, margin_s=300):
+        try:
+            d = json.load(open(os.path.join(self.cfg.auth_dir, self.token_relpath), encoding="utf-8"))
+            exp = (d.get("claudeAiOauth") or d).get("expiresAt")
+            return isinstance(exp, (int, float)) and exp / 1000 - time.time() < margin_s
+        except (OSError, ValueError, AttributeError):
+            return False
+
     def prepare(self, ctx):
         os.makedirs(self._cfgdir(ctx), mode=0o700)
-        if not copy_secret(os.path.join(self.cfg.auth_dir, self.token_relpath), os.path.join(self._cfgdir(ctx), self.token_relpath)):
+        src, dst = os.path.join(self.cfg.auth_dir, self.token_relpath), os.path.join(self._cfgdir(ctx), self.token_relpath)
+        ctx.holds_refresh_lock = False
+        if self._token_near_expiry():
+            if not self._refresh_lock.acquire(timeout=self.cfg.timeout_s):
+                raise RunnerError("busy", "Đang chờ một lượt khác làm mới token.")
+            ctx.holds_refresh_lock = True       # nhả trong finish(), SAU khi đã ghi token mới ngược vào volume
+        if not copy_secret(src, dst):           # đọc SAU khi có khóa: lượt trước có thể vừa làm mới xong
             raise RunnerError("auth_expired", "Chưa có token Claude trong volume xác thực.")
 
     def command(self, ctx, req):
@@ -178,7 +200,12 @@ class ClaudeAdapter(Adapter):
         return out
 
     def finish(self, ctx):
-        sync_back(os.path.join(self._cfgdir(ctx), self.token_relpath), os.path.join(self.cfg.auth_dir, self.token_relpath))
+        try:
+            sync_back(os.path.join(self._cfgdir(ctx), self.token_relpath), os.path.join(self.cfg.auth_dir, self.token_relpath))
+        finally:
+            if getattr(ctx, "holds_refresh_lock", False):
+                ctx.holds_refresh_lock = False
+                self._refresh_lock.release()
 
 
 def req_model(ctx):
