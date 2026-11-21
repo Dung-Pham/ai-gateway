@@ -28,6 +28,16 @@ class HttpRunnerClient:
     def __init__(self, timeout_s: int):
         self.timeout_s = timeout_s
 
+    async def info(self, ref: RunnerRef) -> dict | None:
+        """GET /v1/info (có xác thực). None nếu runner không trả lời."""
+        try:
+            async with httpx.AsyncClient(timeout=min(self.timeout_s, 4), trust_env=False) as c:
+                r = await c.get(ref.url + "/v1/info", headers={"Authorization": "Bearer " + ref.secret})
+            body = r.json() if r.status_code == 200 else None
+            return body if isinstance(body, dict) else None
+        except (httpx.HTTPError, ValueError):
+            return None
+
     async def run(self, ref: RunnerRef, payload: dict) -> tuple[int, dict]:
         try:
             async with httpx.AsyncClient(timeout=self.timeout_s, trust_env=False) as c:   # trust_env=False: không đi qua proxy

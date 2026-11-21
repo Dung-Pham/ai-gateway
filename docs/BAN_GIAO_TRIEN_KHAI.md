@@ -214,6 +214,13 @@ sequenceDiagram
 **Mức kiểm chứng của `aigw login`:** đường ống (tạo container, chạy CLI, chép token, quyền tệp 0600) **đã chạy thử với CLI giả**. **Chưa chạy với đăng nhập thật** của cả ba hãng trong container này (lúc thăm dò, agy đã đăng nhập được trong container sạch bằng cách dán mã; Claude/Grok đã đăng nhập bằng thư mục cấu hình riêng). Nếu CLI nào không cho đăng nhập kiểu này, báo lại để xử lý, đừng tìm đường vòng.
 Khi hết phiên giao diện hiện "Hết phiên" và cảnh báo; chạy lại lệnh trên rồi bấm "Kiểm tra ngay".
 
+**Nhắc đăng nhập trên giao diện (21/11/2026):**
+- Trang **Tài khoản AI** có cột **"Đăng nhập"** (còn bao nhiêu ngày: xanh, vàng, đỏ) và trang chi tiết có mục **Đăng nhập** (ngày hết hạn, nguồn, lần đăng nhập gần nhất).
+- **Claude:** hạn thật đọc từ CLI (hạn tuyệt đối của mã làm mới). **Grok, Codex, Antigravity:** CLI chưa cho biết hạn, nên chỉ có **hạn ước tính** = lần đăng nhập được ghi nhận + số ngày đặt ở **Hệ thống → Cài đặt → Nhắc đăng nhập lại** (mặc định chỉ Grok = 7 ngày theo tài liệu CLI; hãng khác để trống = không nhắc nếu chưa đặt).
+- **Cảnh báo:** mỗi tài khoản có đúng một cảnh báo, mở khi còn **14, 7, 3, 1 ngày** (chỉnh được; còn từ 3 ngày trở xuống là nghiêm trọng), tự đóng khi đã đăng nhập lại. Hiện ở **Cảnh báo** và trên Tổng quan.
+- Nút **"Đăng nhập lại"** ở trang tài khoản mở hướng dẫn từng bước và **lệnh sao chép được** (`cd <thư mục cài> && scripts/aigw login <hãng> <nhãn>`). Làm xong bấm **"Tôi đã đăng nhập xong: kiểm tra"**: gateway kiểm tra, giao diện ghi nhận thời điểm đăng nhập và hạn mới.
+- **Giới hạn:** việc đăng nhập vẫn làm **trong terminal** trên máy AI, **không** làm ngay trong trình duyệt (giao diện không nhận mật khẩu, mã hay token). **Cảnh báo chỉ hiện trong giao diện**: chưa gửi email hay webhook. Đặt `AIGW_INSTALL_DIR` trong `.env` của giao diện nếu thư mục cài khác `/opt/aigw/ai-gateway`. Migration mới (`accounts.logged_in_at`, `login_expires_at`) chạy tự động ở `scripts/aigw up`.
+
 **Claude tự làm mới token** (access sống khoảng 8 giờ) nhưng **mã làm mới có hạn tuyệt đối** (lần thấy: đến 15/12/2026, không dài thêm sau mỗi lần làm mới), nên **phải đăng nhập lại định kỳ, khoảng vài tuần**. Đặt nhắc lịch cho người sở hữu tài khoản. Mỗi tài khoản chỉ nên đăng nhập ở **một nơi**: mã làm mới bị xoay, một bản sao token ở nơi khác sẽ mất hiệu lực.
 
 ### 3.7 🔧 Thêm tài khoản vào giao diện và kiểm tra

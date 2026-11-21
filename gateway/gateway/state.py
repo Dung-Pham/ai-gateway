@@ -16,6 +16,7 @@ class State:
         self.flags = {}                           # nhãn -> "auth_expired" | "tripped"
         self.last_error = {}
         self.quota = {}
+        self.auth_info = {}                       # nhãn -> {"at": epoch, ...} thông tin hạn đăng nhập từ runner (bộ nhớ đệm)
         self.checked_at = {}                      # nhãn -> epoch lần "Kiểm tra ngay" gần nhất
         self.app_inflight = defaultdict(int)
         self.rpm = defaultdict(deque)

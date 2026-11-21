@@ -22,6 +22,16 @@ class ViewAccount extends ViewRecord
     {
         return [
             Actions\EditAction::make()->label('Sửa')->icon('heroicon-m-pencil-square'),
+            Actions\Action::make('login')->label('Đăng nhập lại')->icon('heroicon-m-key')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
+                ->modalHeading("Đăng nhập lại {$this->record->label}")
+                ->modalContent(fn () => view('filament.modals.account-login', ['account' => $this->record, 'steps' => \App\Services\Gateway\LoginGuide::steps($this->record), 'command' => \App\Services\Gateway\LoginGuide::command($this->record)]))
+                ->modalSubmitActionLabel('Tôi đã đăng nhập xong: kiểm tra')->modalCancelActionLabel('Đóng')
+                ->action(function () {
+                    $res = app(\App\Services\Gateway\AccountSync::class)->applyCheck($this->record, app(\App\Services\Gateway\GatewayClient::class)->check($this->record->label), recordLogin: true);
+                    Audit::log('account.login', $this->record->label, ['kết quả' => $res['ok'] ? 'đạt' : 'không đạt']);
+                    Notification::make()->title($res['ok'] ? "{$this->record->label}: đã ghi nhận đăng nhập" : "{$this->record->label}: chưa đăng nhập được")->body($res['message'])->{$res['ok'] ? 'success' : 'danger'}()->send();
+                    $this->redirect(AccountResource::getUrl('view', ['record' => $this->record]));
+                }),
             Actions\Action::make('check')->label('Kiểm tra ngay')->icon('heroicon-m-arrow-path')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
                 ->requiresConfirmation()->modalHeading('Kiểm tra phiên đăng nhập?')
                 ->modalDescription('Gateway sẽ gọi thử một lượt rất nhỏ qua runner của tài khoản này. Lượt này tính vào hạn mức của tài khoản nhưng không tính cho ứng dụng nào.')

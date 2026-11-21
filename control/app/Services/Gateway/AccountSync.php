@@ -49,12 +49,14 @@ class AccountSync
                 $upd['cooldown_until'] = null;
             }
             $upd += $this->quotaColumns($s['quota'] ?? null, $now);
+            $upd += $this->loginColumns($a, $s['auth'] ?? null, $now);
             if (! empty($s['checked_at'])) {
                 $upd['last_auth_check_at'] = \Carbon\Carbon::createFromTimestamp((int) $s['checked_at']);
             }
             $a->update($upd);
 
             $this->flagAlert($a, $flag, $s['last_error'] ?? null);
+            LoginReminder::evaluate($a->refresh());
         }
         $res = ['ok' => true, 'at' => $now->toIso8601String(), 'accounts' => $n];
         Cache::put(self::CACHE_KEY, $res, 3600);
@@ -74,16 +76,41 @@ class AccountSync
         return $out;
     }
 
-    /** Áp kết quả "Kiểm tra ngay" lên tài khoản. Trả về thông điệp cho người dùng. */
-    public function applyCheck(Account $a, array $res): array
+    /** Hạn đăng nhập: ưu tiên số CLI cho biết; hãng không cho biết thì ước tính từ lần đăng nhập gần nhất + hạn cài đặt (nếu có). */
+    public function loginColumns(Account $a, ?array $auth, $now): array
+    {
+        $exp = $auth['login_expires_at'] ?? null;
+        if (is_numeric($exp) && $exp > 0) {
+            return ['login_expires_at' => \Carbon\Carbon::createFromTimestamp((int) $exp), 'login_expires_source' => 'cli'];
+        }
+        $life = LoginPolicy::lifetimeDays($a->provider?->code ?? '');
+        if ($life !== null && $a->logged_in_at !== null) {
+            return ['login_expires_at' => $a->logged_in_at->copy()->addDays($life), 'login_expires_source' => 'estimate'];
+        }
+        if ($a->login_expires_source === 'estimate') {       // hết cài đặt ước tính: bỏ giá trị ước tính cũ
+            return ['login_expires_at' => null, 'login_expires_source' => null];
+        }
+
+        return [];     // giữ giá trị CLI cũ nếu lần này runner không trả lời
+    }
+
+    /** Áp kết quả "Kiểm tra ngay" lên tài khoản. $recordLogin = người dùng báo "đã đăng nhập xong": ghi nhận thời điểm đăng nhập. */
+    public function applyCheck(Account $a, array $res, bool $recordLogin = false): array
     {
         $now = now();
         if ($res['ok'] ?? false) {
             $upd = ['last_auth_check_at' => $now] + $this->quotaColumns($res['quota'] ?? null, $now);
             if (in_array($a->status, [AccountStatus::AuthExpired, AccountStatus::Pending], true)) {
                 $upd['status'] = AccountStatus::Active;
+                $recordLogin = true;                 // từ hết phiên/chờ đăng nhập sang đạt = vừa đăng nhập lại
             }
+            if ($recordLogin) {
+                $upd['logged_in_at'] = $now;
+                $a->logged_in_at = $now;             // để ước tính bên dưới dùng đúng mốc mới
+            }
+            $upd += $this->loginColumns($a, $res['auth'] ?? null, $now);
             $a->update($upd);
+            LoginReminder::evaluate($a->refresh());
             $this->resolve('account_auth_expired', $a->id);
             $this->resolve('account_tripped', $a->id);
 

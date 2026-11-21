@@ -282,3 +282,32 @@ def test_claude_token_con_han_thi_khong_chan_nhau(make_service):
     svc.token.write_text(_json.dumps({"claudeAiOauth": {"accessToken": "A", "refreshToken": "R", "expiresAt": int((_time.time() + 7200) * 1000)}}))
     assert svc.adapter._token_near_expiry() is False
     assert run(svc)[1]["ok"]
+
+
+# ---------------------------------------------------------------- hạn đăng nhập (chỉ số/ngày, không bao giờ có token)
+def test_claude_auth_info_doc_han_ma_lam_moi_va_khong_lo_token(make_service):
+    import json as _json
+    svc = make_service("claude")
+    svc.token.write_text(_json.dumps({"claudeAiOauth": {"accessToken": "SECRET-A", "refreshToken": "SECRET-R", "expiresAt": 1795000000000,
+                                                         "refreshTokenExpiresAt": 1797000000000, "subscriptionType": "max"}}))
+    info = svc.adapter.auth_info()
+    assert info == {"login_expires_at": 1797000000.0, "access_expires_at": 1795000000.0, "subscription": "max"}
+    assert "SECRET" not in _json.dumps(info)
+
+
+def test_auth_info_khong_co_tep_hoac_hong_thi_none(make_service):
+    svc = make_service("claude")
+    svc.token.write_text("khong phai json")
+    assert svc.adapter.auth_info()["login_expires_at"] is None
+    os.remove(svc.token)
+    assert svc.adapter.auth_info()["login_expires_at"] is None
+
+
+def test_codex_auth_info_chi_co_han_access_va_khong_lo_token(make_service):
+    import base64
+    import json as _json
+    payload = base64.urlsafe_b64encode(_json.dumps({"exp": 1795500000}).encode()).decode().rstrip("=")
+    svc = make_service("codex")
+    svc.token.write_text(_json.dumps({"tokens": {"access_token": f"h.{payload}.s", "refresh_token": "SECRET-R"}}))
+    info = svc.adapter.auth_info()
+    assert info == {"login_expires_at": None, "access_expires_at": 1795500000.0} and "SECRET" not in _json.dumps(info)

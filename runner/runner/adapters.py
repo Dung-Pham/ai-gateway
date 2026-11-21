@@ -92,6 +92,16 @@ class Adapter:
     def info(self):
         return {"provider": self.name, "capabilities": sorted(self.capabilities)}
 
+    def auth_info(self) -> dict:
+        """Thông tin HẠN đăng nhập, CHỈ số/ngày (không bao giờ có token). login_expires_at: thời điểm phải đăng nhập lại (epoch giây) nếu CLI cho biết, ngược lại None."""
+        return {"login_expires_at": None}
+
+    def _read_auth_file(self):
+        try:
+            return json.load(open(os.path.join(self.cfg.auth_dir, self.token_relpath), encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
 
 # =============================================================================
 class ClaudeAdapter(Adapter):
@@ -107,6 +117,14 @@ class ClaudeAdapter(Adapter):
 
     def _cfgdir(self, ctx):
         return os.path.join(ctx.home, ".claude")
+
+    def auth_info(self):
+        d = self._read_auth_file()
+        o = (d.get("claudeAiOauth") if isinstance(d, dict) else None) or d or {}
+        ms = lambda k: (o.get(k) / 1000.0) if isinstance(o, dict) and isinstance(o.get(k), (int, float)) else None
+        # refreshTokenExpiresAt: hạn TUYỆT ĐỐI của mã làm mới (thấy thật 21/11/2026: không dài thêm sau mỗi lần làm mới)
+        return {"login_expires_at": ms("refreshTokenExpiresAt"), "access_expires_at": ms("expiresAt"),
+                "subscription": o.get("subscriptionType") if isinstance(o, dict) and isinstance(o.get("subscriptionType"), str) else None}
 
     def _token_near_expiry(self, margin_s=300):
         try:
@@ -356,6 +374,17 @@ class CodexAdapter(Adapter):
 
     def max_prompt_bytes(self):
         return self.cfg.max_body   # prompt đi qua stdin
+
+    def auth_info(self):
+        # Hạn mã làm mới của Codex chưa biết; chỉ biết hạn access token (JWT exp, hiện khoảng 10 ngày)
+        import base64
+        d = self._read_auth_file()
+        try:
+            p = ((d or {}).get("tokens") or {}).get("access_token", "").split(".")[1]
+            exp = json.loads(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4))).get("exp")
+        except (IndexError, ValueError, AttributeError):
+            exp = None
+        return {"login_expires_at": None, "access_expires_at": float(exp) if isinstance(exp, (int, float)) else None}
 
     def _chome(self, ctx):
         return os.path.join(ctx.home, ".codex")

@@ -298,3 +298,42 @@ def test_codex_la_hang_hop_le_va_van_bi_chinh_sach_model_chan(env):
 def test_kiem_tra_ngay_dung_model_re_cua_codex():
     from gateway.config import Settings
     assert Settings(database_url="x", key_pepper="p" * 20).check_models["codex"] == "gpt-6-luna"
+
+
+# ---------------------------------------------------------------- hạn đăng nhập (từ runner)
+def test_trang_thai_noi_bo_co_han_dang_nhap_va_dem_10_phut(env):
+    from conftest import ADMIN
+    h = {"X-Admin-Token": ADMIN}
+    env.runner.auth_script = {"claude-01": {"provider": "claude", "auth": {"login_expires_at": 1797000000.0, "access_expires_at": 1795000000.0}}}
+    s = env.client.get("/internal/state", headers=h).json()["accounts"]
+    assert s["claude-01"]["auth"]["login_expires_at"] == 1797000000.0 and "at" not in s["claude-01"]["auth"]
+    assert s["claude-02"]["auth"] == {"login_expires_at": None}
+    n = env.runner.info_calls
+    env.client.get("/internal/state", headers=h)
+    assert env.runner.info_calls == n                          # còn trong 10 phút: không hỏi lại runner
+    env.clock.e += 700
+    env.client.get("/internal/state", headers=h)
+    assert env.runner.info_calls > n                            # quá 10 phút: hỏi lại
+
+
+def test_kiem_tra_ngay_tra_kem_han_dang_nhap_moi(env):
+    from conftest import ADMIN
+    h = {"X-Admin-Token": ADMIN}
+    env.runner.auth_script = {"claude-01": {"provider": "claude", "auth": {"login_expires_at": 1797000000.0}}}
+    r = env.client.post("/internal/accounts/claude-01/check", headers=h).json()
+    assert r["ok"] is True and r["auth"]["login_expires_at"] == 1797000000.0
+    env.runner.auth_script["claude-01"] = {"provider": "claude", "auth": {"login_expires_at": 1799000000.0}}
+    assert env.client.post("/internal/accounts/claude-01/check", headers=h).json()["auth"]["login_expires_at"] == 1799000000.0   # ép lấy mới, không dùng đệm
+
+
+def test_runner_khong_tra_loi_thi_giu_gia_tri_cu_va_khong_loi(env):
+    from conftest import ADMIN
+    h = {"X-Admin-Token": ADMIN}
+    env.runner.auth_script = {"claude-01": {"provider": "claude", "auth": {"login_expires_at": 1797000000.0}}}
+    env.client.get("/internal/state", headers=h)
+    async def none(ref):
+        return None
+    env.runner.info = none
+    env.clock.e += 700
+    s = env.client.get("/internal/state", headers=h)
+    assert s.status_code == 200 and s.json()["accounts"]["claude-01"]["auth"]["login_expires_at"] == 1797000000.0

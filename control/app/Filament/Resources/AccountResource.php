@@ -93,6 +93,10 @@ class AccountResource extends Resource
                 ViewColumn::make('label')->label('Tài khoản')->view('filament.tables.columns.account-name')->searchable()->sortable(),
                 TextColumn::make('status')->label('Trạng thái')->badge()->sortable(),
                 ViewColumn::make('quota')->label('Mức dùng')->view('filament.tables.columns.quota'),
+                TextColumn::make('login_days_left')->label('Đăng nhập')->badge()
+                    ->state(fn (Account $r) => match ($r->login_level) { 'unknown' => 'Chưa rõ hạn', 'expired' => 'Đã hết hạn', default => 'Còn '.$r->login_days_left.' ngày' })
+                    ->color(fn (Account $r) => match ($r->login_level) { 'expired', 'critical' => 'danger', 'warning' => 'warning', 'ok' => 'success', default => 'gray' })
+                    ->tooltip(fn (Account $r) => $r->login_expires_at ? 'Hết hạn '.$r->login_expires_at->setTimezone(config('gateway.timezone'))->format('d/m/Y').' ('.$r->login_source_label.')' : 'Hãng này chưa cho biết hạn đăng nhập; đặt hạn ước tính ở Hệ thống → Cài đặt.'),
                 TextColumn::make('slots')->label('Slot')->state(fn (Account $r) => "{$r->current_concurrency}/{$r->max_concurrency}")->fontFamily('mono')->alignEnd(),
                 TextColumn::make('cooldown_until')->label('Nghỉ đến')->dateTime('H:i d/m')->fontFamily('mono')->placeholder('—'),
                 TextColumn::make('last_auth_check_at')->label('Kiểm tra phiên')->since()->color('gray'),
@@ -104,6 +108,7 @@ class AccountResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make()->label('Xem'),
                 Tables\Actions\EditAction::make()->label('Sửa'),
+                self::loginAction(),
                 self::checkAction(),
                 self::pauseAction(),
                 self::resumeAction(),
@@ -113,6 +118,21 @@ class AccountResource extends Resource
             ->poll('30s')
             ->emptyStateHeading('Chưa có tài khoản AI nào')
             ->emptyStateDescription('Thêm tài khoản bằng script của người vận hành (xem hướng dẫn trong runbook), sau đó bấm "Kiểm tra ngay".');
+    }
+
+    /** "Đăng nhập lại": hướng dẫn từng bước + lệnh sao chép được; xong thì kiểm tra và ghi nhận thời điểm đăng nhập. KHÔNG nhận mật khẩu/mã/token. */
+    public static function loginAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('login')->label('Đăng nhập lại')->icon('heroicon-m-key')->color('gray')
+            ->authorize(fn () => Perm::can('accounts.manage'))
+            ->modalHeading(fn (Account $r) => "Đăng nhập lại {$r->label}")
+            ->modalContent(fn (Account $r) => view('filament.modals.account-login', ['account' => $r, 'steps' => \App\Services\Gateway\LoginGuide::steps($r), 'command' => \App\Services\Gateway\LoginGuide::command($r)]))
+            ->modalSubmitActionLabel('Tôi đã đăng nhập xong: kiểm tra')->modalCancelActionLabel('Đóng')
+            ->action(function (Account $r) {
+                $res = app(\App\Services\Gateway\AccountSync::class)->applyCheck($r, app(\App\Services\Gateway\GatewayClient::class)->check($r->label), recordLogin: true);
+                Audit::log('account.login', $r->label, ['kết quả' => $res['ok'] ? 'đạt' : 'không đạt']);
+                Notification::make()->title($res['ok'] ? "{$r->label}: đã ghi nhận đăng nhập" : "{$r->label}: chưa đăng nhập được")->body($res['message'])->{$res['ok'] ? 'success' : 'danger'}()->send();
+            });
     }
 
     /** "Kiểm tra ngay": gateway gọi một lượt rất nhỏ qua runner của tài khoản. Dùng ở bảng và trang chi tiết. */
@@ -169,11 +189,18 @@ class AccountResource extends Resource
             Section::make('Mức dùng')->description('Nguồn của từng con số được ghi rõ. Không có số nào là hạn mức chính thức của hãng.')->schema([
                 ViewEntry::make('quota')->view('filament.infolists.quota-detail')->hiddenLabel(),
             ]),
+            Section::make('Đăng nhập')->description('Phiên đăng nhập có hạn. Giao diện nhắc trước khi hết hạn; đăng nhập do người sở hữu tài khoản làm trong terminal.')->columns(['default' => 1, 'md' => 3])->schema([
+                TextEntry::make('login_expires_at')->label('Hết hạn')->dateTime('d/m/Y')->placeholder('Chưa rõ hạn'),
+                TextEntry::make('login_days_left')->label('Còn lại')->state(fn (Account $r) => $r->login_days_left === null ? '—' : ($r->login_days_left <= 0 ? 'Đã hết hạn' : $r->login_days_left.' ngày'))
+                    ->badge()->color(fn (Account $r) => match ($r->login_level) { 'expired', 'critical' => 'danger', 'warning' => 'warning', 'ok' => 'success', default => 'gray' }),
+                TextEntry::make('login_source_label')->label('Nguồn')->color('gray'),
+                TextEntry::make('logged_in_at')->label('Đăng nhập lần cuối được ghi nhận')->dateTime('d/m/Y H:i')->placeholder('Chưa ghi nhận'),
+            ]),
             Section::make('Cần đăng nhập lại')->icon('heroicon-m-exclamation-triangle')->iconColor('danger')
                 ->visible(fn (Account $r) => $r->status === AccountStatus::AuthExpired)
                 ->schema([
                     TextEntry::make('notes')->hiddenLabel()->default('Phiên đăng nhập đã hết.'),
-                    TextEntry::make('relogin')->hiddenLabel()->state('Đăng nhập lại do người vận hành làm bằng tay trên server (SSH vào runner của tài khoản này). Giao diện web không nhận mật khẩu hay token. Lệnh cụ thể sẽ chốt sau bước thăm dò CLI. Xong, quay lại đây bấm "Kiểm tra ngay".')->color('gray'),
+                    TextEntry::make('relogin')->hiddenLabel()->state('Bấm "Đăng nhập lại" ở đầu trang để xem các bước và lệnh. Giao diện web không nhận mật khẩu, mã hay token. Xong, bấm "Tôi đã đăng nhập xong: kiểm tra".')->color('gray'),
                 ]),
             Section::make('Thuộc pool')->schema([
                 TextEntry::make('pools.name')->hiddenLabel()->badge()->placeholder('Chưa thuộc pool nào'),

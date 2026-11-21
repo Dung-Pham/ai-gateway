@@ -5,7 +5,7 @@
 CREATE TABLE "providers" ("id" integer primary key autoincrement not null, "code" varchar not null, "name" varchar not null, "color" varchar not null, "created_at" datetime, "updated_at" datetime);
 CREATE UNIQUE INDEX "providers_code_unique" on "providers" ("code");
 
-CREATE TABLE "accounts" ("id" integer primary key autoincrement not null, "provider_id" integer not null, "label" varchar not null, "plan" varchar, "status" varchar not null default 'active', "cooldown_until" datetime, "max_concurrency" integer not null default '2', "current_concurrency" integer not null default '0', "runner_url" varchar, "notes" text, "pct_5h" numeric, "pct_week" numeric, "quota_source" varchar, "quota_updated_at" datetime, "last_auth_check_at" datetime, "created_at" datetime, "updated_at" datetime, foreign key("provider_id") references "providers"("id") on delete cascade);
+CREATE TABLE "accounts" ("id" integer primary key autoincrement not null, "provider_id" integer not null, "label" varchar not null, "plan" varchar, "status" varchar not null default 'active', "cooldown_until" datetime, "max_concurrency" integer not null default '2', "current_concurrency" integer not null default '0', "runner_url" varchar, "notes" text, "pct_5h" numeric, "pct_week" numeric, "quota_source" varchar, "quota_updated_at" datetime, "last_auth_check_at" datetime, "created_at" datetime, "updated_at" datetime, "logged_in_at" datetime, "login_expires_at" datetime, "login_expires_source" varchar, foreign key("provider_id") references "providers"("id") on delete cascade);
 CREATE UNIQUE INDEX "accounts_label_unique" on "accounts" ("label");
 CREATE INDEX "accounts_status_index" on "accounts" ("status");
 

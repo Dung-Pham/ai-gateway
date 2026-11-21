@@ -49,6 +49,10 @@ class FakeRunner:
     def fail(self, cls, **over):
         return {"ok": False, "error_class": cls, "message": "x", **over}
 
+    async def info(self, ref):
+        self.info_calls = getattr(self, "info_calls", 0) + 1
+        return getattr(self, "auth_script", {}).get(ref.label, {"provider": "claude", "auth": {"login_expires_at": None}})
+
     async def run(self, ref, payload):
         self.calls.append((ref.label, ref.url, ref.secret, payload))
         q = self.script.get(ref.label)

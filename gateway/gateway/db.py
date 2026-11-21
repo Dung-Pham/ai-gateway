@@ -92,6 +92,12 @@ class Store:
             return [r[0] for r in c.execute(select(w.c.model).order_by(w.c.model))]
 
     # ---- tài khoản và pool
+    def all_accounts(self):
+        a, pr = self.t["accounts"], self.t["providers"]
+        q = select(a.c.id, a.c.label, a.c.runner_url, pr.c.code.label("provider")).join(pr, pr.c.id == a.c.provider_id)
+        with self.engine.connect() as c:
+            return [dict(r) for r in c.execute(q).mappings()]
+
     def pool_accounts(self, pool_id: int):
         m, a, pr, pl = self.t["pool_members"], self.t["accounts"], self.t["providers"], self.t["pools"]
         q = (select(a.c.id, a.c.label, a.c.status, a.c.cooldown_until, a.c.max_concurrency, a.c.runner_url, pr.c.code.label("provider"),

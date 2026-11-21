@@ -50,6 +50,10 @@ class Settings extends Page implements HasForms
             'usage_days' => Setting::read('retention.usage_days', 90),
             'audit_days' => Setting::read('retention.audit_days', 365),
             'emails' => Setting::read('alert.emails', []),
+            'login_remind_days' => \App\Services\Gateway\LoginPolicy::remindDays(),
+            'lifetime_codex' => \App\Services\Gateway\LoginPolicy::lifetimeDays('codex'),
+            'lifetime_grok' => \App\Services\Gateway\LoginPolicy::lifetimeDays('grok'),
+            'lifetime_agy' => \App\Services\Gateway\LoginPolicy::lifetimeDays('agy'),
             'webhook_url' => null,
             'webhook_clear' => false,
         ]);
@@ -67,6 +71,13 @@ class Settings extends Page implements HasForms
             Forms\Components\Section::make('Kiểm tra phiên đăng nhập')->schema([
                 Forms\Components\TextInput::make('auth_check_minutes')->label('Kiểm tra mỗi (phút)')->numeric()->minValue(5)->maxValue(1440)->required()->suffix('phút')
                     ->helperText('Mỗi lần kiểm tra là một lượt gọi rất nhẹ và tính vào hạn mức của tài khoản. Giá trị phù hợp chốt sau khi đo (thăm dò P2, P10).'),
+            ]),
+            Forms\Components\Section::make('Nhắc đăng nhập lại')->description('Phiên đăng nhập có hạn. Claude cho biết hạn thật qua CLI; hãng khác chưa cho biết nên có thể đặt hạn ước tính (ngày kể từ lần đăng nhập được ghi nhận). Để trống = không ước tính.')->columns(['default' => 1, 'md' => 2])->schema([
+                Forms\Components\TagsInput::make('login_remind_days')->label('Nhắc khi còn (ngày)')->placeholder('Gõ số rồi Enter')->nestedRecursiveRules(['integer', 'min:1', 'max:365'])->required()->columnSpanFull()
+                    ->helperText('Mỗi tài khoản có đúng một cảnh báo; mức tăng dần khi gần hạn (còn từ 3 ngày trở xuống là nghiêm trọng). Mặc định 14, 7, 3, 1.'),
+                Forms\Components\TextInput::make('lifetime_grok')->label('Hạn ước tính của Grok (ngày)')->numeric()->minValue(1)->maxValue(365)->suffix('ngày')->helperText('Tài liệu CLI ghi token hết hạn sau 7 ngày (chưa biết có tự làm mới không).'),
+                Forms\Components\TextInput::make('lifetime_codex')->label('Hạn ước tính của Codex (ngày)')->numeric()->minValue(1)->maxValue(365)->suffix('ngày')->helperText('Chưa biết hạn thật. Chỉ đặt nếu bạn muốn nhắc định kỳ.'),
+                Forms\Components\TextInput::make('lifetime_agy')->label('Hạn ước tính của Antigravity (ngày)')->numeric()->minValue(1)->maxValue(365)->suffix('ngày')->helperText('Chưa biết hạn thật. Chỉ đặt nếu bạn muốn nhắc định kỳ.'),
             ]),
             Forms\Components\Section::make('Giữ dữ liệu')->columns(['default' => 1, 'md' => 2])->schema([
                 Forms\Components\TextInput::make('usage_days')->label('Nhật ký yêu cầu giữ (ngày)')->numeric()->minValue(7)->maxValue(1095)->required()->suffix('ngày'),
@@ -104,6 +115,8 @@ class Settings extends Page implements HasForms
         Setting::write('retention.usage_days', (int) $d['usage_days']);
         Setting::write('retention.audit_days', (int) $d['audit_days']);
         Setting::write('alert.emails', array_values($d['emails'] ?? []));
+        Setting::write('login.remind_days', array_values(array_unique(array_map('intval', $d['login_remind_days'] ?? \App\Services\Gateway\LoginPolicy::DEFAULT_REMIND_DAYS))));
+        Setting::write('login.lifetime_days', array_filter(['grok' => (int) ($d['lifetime_grok'] ?? 0), 'codex' => (int) ($d['lifetime_codex'] ?? 0), 'agy' => (int) ($d['lifetime_agy'] ?? 0)]));
 
         $webhook = 'giữ nguyên';
         if (! empty($d['webhook_clear'])) {

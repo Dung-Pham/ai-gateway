@@ -341,14 +341,41 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
         return {"ok": True, "version": __version__}
 
     # ------------------------------------------------------------------ nội bộ (cần X-Admin-Token)
+    AUTH_INFO_TTL_S = 600
+
+    async def refresh_auth_info(force: bool = False):
+        """Hỏi runner hạn đăng nhập (số/ngày, không token), tối đa mỗi 10 phút một lần cho mỗi tài khoản."""
+        import asyncio
+        now = clock.epoch()
+        accs = await threaded(store.all_accounts)
+
+        async def one(a):
+            old = state.auth_info.get(a["label"])
+            if not force and old and now - old["at"] < AUTH_INFO_TTL_S:
+                return
+            secret = settings.runner_secrets.get(a["label"])
+            try:
+                url = validate_runner_url(a["runner_url"], settings.runner_host_regex, settings.allow_runner_port_min)
+            except ApiError:
+                return
+            if not secret:
+                return
+            info = await runner.info(RunnerRef(a["label"], url, secret))
+            if info is not None:
+                state.auth_info[a["label"]] = {"at": now, **(info.get("auth") or {})}
+        await asyncio.gather(*[one(a) for a in accs])
+
     @app.get("/internal/state")
     async def internal_state(request: Request):
         admin_only(request)
+        await refresh_auth_info()
         now = clock.epoch()
-        labels = set(state.inflight) | set(state.cooldown_until) | set(state.flags) | set(state.last_error) | set(state.quota)
+        labels = set(state.inflight) | set(state.cooldown_until) | set(state.flags) | set(state.last_error) | set(state.quota) | set(state.auth_info)
         return {"accounts": {l: {"inflight": state.inflight.get(l, 0), "cooldown_s": max(0, int(state.cooldown_until.get(l, 0) - now)),
                                  "flag": state.flags.get(l), "last_error": state.last_error.get(l), "quota": state.quota.get(l),
-                                 "checked_at": state.checked_at.get(l)} for l in sorted(labels | set(state.checked_at))},
+                                 "checked_at": state.checked_at.get(l),
+                                 "auth": {k: v for k, v in (state.auth_info.get(l) or {}).items() if k != "at"} or None}
+                             for l in sorted(labels | set(state.checked_at))},
                 "counters": dict(state.counters)}
 
     @app.post("/internal/accounts/{label}/reset")
@@ -379,7 +406,9 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
                 state.quota[label] = res["quota"]
             state.checked_at[label] = clock.epoch()
             state.inc("account_checks_ok_total")
-            return {"ok": True, "latency_ms": lat, "quota": res.get("quota") or {}}
+            await refresh_auth_info(force=True)      # vừa đăng nhập/làm mới: lấy hạn mới
+            return {"ok": True, "latency_ms": lat, "quota": res.get("quota") or {},
+                    "auth": {k: v for k, v in (state.auth_info.get(label) or {}).items() if k != "at"} or None}
         cls = res.get("error_class", "upstream_error")
         state.last_error[label] = cls
         if cls == "auth_expired":

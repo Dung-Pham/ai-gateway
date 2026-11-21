@@ -110,6 +110,7 @@ def make_handler(service: RunnerService):
                 return self._send(401, {"ok": False, "error_class": "bad_request", "message": "Không có quyền."})
             if self.path == "/v1/info":
                 info = service.adapter.info()
+                info["auth"] = service.adapter.auth_info()
                 info.update({"version": __version__, "cli_sha256": (sha256_file(cfg.cli_bin)[:16] if cfg.cli_sha256 else None),
                              "max_concurrency": cfg.max_concurrency, "tripped": service.tripped})
                 return self._send(200, info)

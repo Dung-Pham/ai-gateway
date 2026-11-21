@@ -15,6 +15,8 @@ return [
 
     // Nối với gateway (tiến trình FastAPI). Giao diện chỉ gọi các đường /internal/* bằng mã quản trị; không bao giờ đi qua mạng công cộng.
     'url' => rtrim((string) env('GATEWAY_URL', 'http://gateway:8000'), '/'),
+    // Thư mục cài đặt trên máy AI, chỉ để hiện đúng lệnh `scripts/aigw login ...` trong hướng dẫn đăng nhập.
+    'install_dir' => env('AIGW_INSTALL_DIR', '/opt/aigw/ai-gateway'),
     // Mã quản trị: ưu tiên tệp (Docker secret), nếu không có thì đọc biến GATEWAY_ADMIN_TOKEN.
     'admin_token_file' => env('GATEWAY_ADMIN_TOKEN_FILE'),
     'admin_token' => env('GATEWAY_ADMIN_TOKEN'),
