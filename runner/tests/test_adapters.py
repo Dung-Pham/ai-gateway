@@ -241,3 +241,9 @@ def test_codex_token_lam_moi_duoc_ghi_nguoc_va_thu_muc_tam_bi_xoa(make_service):
 def test_codex_chi_ho_tro_van_ban(make_service):
     code, b = run(make_service("codex"), capability="web_search", **CODEX_REQ)
     assert not b["ok"] and b["error_class"] == "unsupported"
+
+
+def test_claude_token_oauth_het_han_khong_lam_moi_duoc_la_het_phien_chu_khong_phai_502(make_service):
+    # Thông báo thật khi proxy chặn platform.claude.com nên CLI không làm mới được token
+    code, b = run(make_service("claude"), user="@@EXPIRED")
+    assert not b["ok"] and b["error_class"] == "auth_expired"

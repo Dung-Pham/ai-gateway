@@ -284,3 +284,14 @@ Tên miền cần ra ngoài (chưa ghi qua bộ ghi tên miền; **có cơ chế
 - **Chưa thấy CLI tự làm mới token** (token còn hạn đến 22/11; bản sao không đổi). Đường ghi ngược token chỉ được test bằng CLI giả.
 - Chưa thử `web_search` của Codex làm khả năng riêng (đã tắt; runner chỉ hỗ trợ `text`), chưa thử ảnh, chưa thử model khác ngoài `gpt-6-luna`, chưa thử đồng thời nhiều lượt, chưa thử bài dài.
 - Bộ cờ gắn với **phiên bản 0.163.0**: nâng phiên bản phải chạy lại bài thử mục 1 và 2 (Codex đang thêm tính năng mới liên tục; tính năng mới mặc định bật có thể mở lại công cụ).
+
+
+---
+
+# Đợt 5: Sự cố ở server thật, 21/11/2026 (token hết hạn không làm mới được)
+
+**Hiện tượng:** SEO Studio báo "Lỗi kết nối, HTTP 502" khi kiểm tra kết nối; log web thấy 3 lượt `POST /v1/chat/completions` lúc 14:02 đến 14:04 mỗi lượt khoảng 6 giây rồi 502 (117 byte).
+**Nguyên nhân (suy ra từ log và CLI, chưa thấy thông báo lỗi nguyên văn của runner):** Claude CLI làm mới token OAuth qua `https://platform.claude.com/v1/oauth/token` (có trong tệp thực thi 2.1.308, kèm thông báo "OAuth token expired and refresh failed (re-login required)"). Proxy của Cổng AI chỉ cho `api.anthropic.com`, log proxy ghi `platform.claude.com:443` bị chặn **282 lần**. Token hết hạn (khoảng 8 giờ sau lần đăng nhập) nên mọi lượt gọi lỗi.
+**Vì sao các đợt thăm dò trước không thấy:** mỗi lần quan sát ngắn hơn hạn của token, CLI chưa cần làm mới. Đây là **lỗ hổng của danh sách tên miền** do quan sát không đủ lâu, không phải do người vận hành.
+**Lỗi thứ hai của runner:** thông báo trên không chứa "not logged in" hay "/login" nên bị xếp là `upstream_error` (502) thay vì `auth_expired` (giao diện không hiện "Hết phiên", không có cảnh báo). Đã sửa (`looks_auth_expired`, có test).
+**Còn phải kiểm chứng:** CLI có thật sự làm mới được và ghi token mới ngược vào volume (đường `sync_back`) sau khi mở `platform.claude.com`: chưa từng thấy lần làm mới thật nào. `auth.openai.com` (Codex) và `oauth2.googleapis.com` (agy) mới suy ra từ chuỗi trong tệp thực thi. Grok: chưa xác định địa chỉ làm mới.

@@ -66,6 +66,8 @@ if prov == "claude":
     print(json.dumps({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "unifiedWindows": {"five_hour": {"utilization": 0.39, "resetsAt": 1795088400}, "seven_day": {"utilization": 0.44, "resetsAt": 1795276800}}}}))
     if has("@@AUTH"):
         print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": "Not logged in · Please run /login", "usage": {}, "modelUsage": {}}))
+    elif has("@@EXPIRED"):
+        print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": "OAuth token expired and refresh failed (re-login required)", "usage": {}, "modelUsage": {}}))
     elif has("@@LIMIT"):
         print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": "You've hit your usage limit · resets 5pm", "usage": {}, "modelUsage": {}}))
     else:

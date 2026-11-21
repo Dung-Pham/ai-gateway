@@ -14,7 +14,7 @@ import re
 
 from .context import copy_secret, sync_back
 from . import search as S
-from .errors import RunnerError, looks_rate_limited
+from .errors import RunnerError, looks_auth_expired, looks_rate_limited
 
 MODEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
@@ -148,12 +148,13 @@ class ClaudeAdapter(Adapter):
         res = next((e for e in reversed(events) if e.get("type") == "result"), None)
         if res is None:
             msg = (err or out)[:300]
+            if looks_auth_expired(msg):
+                raise RunnerError("auth_expired", msg)
             raise RunnerError("rate_limited" if looks_rate_limited(msg) else "upstream_error", "Claude không trả kết quả: " + msg)
         text = res.get("result")
         if res.get("is_error") or not isinstance(text, str):
             msg = str(text or err)[:300]
-            low = msg.lower()
-            if "not logged in" in low or "/login" in low:
+            if looks_auth_expired(msg):
                 raise RunnerError("auth_expired", msg)
             raise RunnerError("rate_limited" if (limited or looks_rate_limited(msg)) else "upstream_error", msg)
         if limited:

@@ -72,7 +72,7 @@ Mục tiêu của tài liệu này: để quản lý đưa lên server **không 
 
 **Mạng ra từ máy AI** (qua proxy của Cổng AI, không mở rộng hơn):
 - Khi cài: tải ảnh Docker (`php`, `node`, `composer`, `caddy`, `mariadb`, `python` từ registry), thư viện (`packagist.org`, `registry.npmjs.org`, `pypi.org`) lúc `build`.
-- Khi chạy: `api.anthropic.com:443` (Claude), `cli-chat-proxy.grok.com:443` (Grok), `daily-cloudcode-pa.googleapis.com:443` và `www.googleapis.com:443` (agy), `chatgpt.com:443` (Codex) và `api.openai.com:443` (Codex, chỉ để nhận lỗi hết phiên nhanh). Danh sách nằm ở `deploy/egress-allowlist.txt`; **chỉ thêm tên miền sau khi hiểu lý do**.
+- Khi chạy: `api.anthropic.com:443` (Claude), `cli-chat-proxy.grok.com:443` (Grok), `daily-cloudcode-pa.googleapis.com:443` và `www.googleapis.com:443` (agy), `chatgpt.com:443` (Codex) và `api.openai.com:443` (Codex, chỉ để nhận lỗi hết phiên nhanh). **Làm mới token** (bắt buộc, thiếu thì vài giờ sau mọi lượt gọi lỗi): `platform.claude.com:443` (Claude, **đã gặp lỗi thật ở server 21/11**), `auth.openai.com:443` (Codex) và `oauth2.googleapis.com:443` (agy) là hai dòng suy ra từ chuỗi trong CLI, chưa quan sát thật. Danh sách nằm ở `deploy/egress-allowlist.txt`; **chỉ thêm tên miền sau khi hiểu lý do**.
 
 **Luồng mạng cần mở vào máy AI** (mọi thứ khác đóng):
 
@@ -316,7 +316,7 @@ Phần còn lại của kiểm chứng cách ly máy AI: `docs/CACH_LY_MAY_CHU.m
 | "Gateway mất kết nối" | `gateway` chết hoặc `admin_token` lệch | `scripts/aigw logs gateway`; không đổi `admin_token` khi hệ thống đang chạy |
 | Gọi API trả `no_account_available` | Tài khoản "Chờ đăng nhập"/"Hết phiên"/"Đang nghỉ", hoặc pool rỗng | Bấm "Kiểm tra ngay"; xem pool của ứng dụng |
 | Gọi API trả `invalid_api_key` | Khóa sai, đã thu hồi, hoặc `app_key` đã bị đổi | Tạo khóa mới; nếu `app_key` mất, mọi khóa cũ vô hiệu |
-| Hết phiên liên tục | Token CLI hết hạn | `scripts/aigw login ...` (3.6) |
+| Hết phiên liên tục, hoặc mọi lượt Claude lỗi `502` sau vài giờ | Token OAuth hết hạn và proxy chặn địa chỉ làm mới (`platform.claude.com`) | Thêm các dòng làm mới token vào `deploy/egress-allowlist.txt`, tạo lại `egress-proxy`; nếu vẫn lỗi thì `scripts/aigw login ...` (3.6) |
 | `web` báo không chạy được `caddy` | Bỏ `cap_add: NET_BIND_SERVICE` | Giữ nguyên cấu hình trong `docker-compose.yml` |
 
 ## 11. Bản đồ tệp
