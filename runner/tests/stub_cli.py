@@ -8,6 +8,36 @@ import sys
 import time
 
 argv = sys.argv[1:]
+# ---- CHẾ ĐỘ ĐĂNG NHẬP (định dạng lấy từ CLI thật 21/11/2026) ---------------------------------------------------
+if argv[:2] == ["auth", "login"]:                       # Claude: chờ mã dán ở stdin; mã sai thì báo và vẫn chờ
+    cfgd = os.environ["CLAUDE_CONFIG_DIR"]
+    if os.environ.get("STUB_LOG"):
+        open(os.environ["STUB_LOG"], "a").write(json.dumps({"provider": "claude-login", "argv": argv, "env_keys": sorted(os.environ), "cwd": os.getcwd()}) + "\n")
+    print("Opening browser to sign in…")
+    print(os.environ.get("STUB_LOGIN_URL", "If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=stub&response_type=code"))
+    sys.stdout.write("Paste code here if prompted > "); sys.stdout.flush()
+    for line in sys.stdin:
+        code = line.strip()
+        if code == "GOODCODE-123456":
+            json.dump({"claudeAiOauth": {"accessToken": "NEW-ACCESS", "refreshToken": "NEW-REFRESH", "expiresAt": 4102444800000, "refreshTokenExpiresAt": 4105000000000}}, open(os.path.join(cfgd, ".credentials.json"), "w"))
+            print("Login successful."); sys.exit(0)
+        sys.stdout.write("Invalid code. Please make sure the full code was copied.\n"); sys.stdout.write("Paste code here if prompted > "); sys.stdout.flush()
+    sys.exit(1)
+if argv[:2] in (["login", "--device-auth"], ["login", "--device-code"]):     # Codex / Grok: in mã thiết bị rồi chờ người dùng xác nhận trên trang hãng
+    codex = argv[1] == "--device-auth" or argv[1] == "--device-auth"
+    home = os.environ.get("CODEX_HOME") or os.environ.get("GROK_HOME")
+    if codex:
+        print("Follow these steps to sign in with ChatGPT using device code authorization:\n\n1. Open this link in your browser and sign in to your account\n   https://auth.openai.com/codex/device\n\n2. Enter this one-time code (expires in 15 minutes)\n   ABCD-EFG12\n")
+    else:
+        print("To sign in, open this URL in your browser:\n\n  https://accounts.x.ai/oauth2/device?user_code=WXYZ-1234\n\nConfirm this code in your browser:\n\n  WXYZ-1234\n\nWaiting for authorization...")
+    sys.stdout.flush()
+    for _ in range(int(float(os.environ.get("STUB_DEVICE_WAIT", "6")) * 20)):
+        if os.path.exists(os.environ.get("STUB_APPROVE", "/nonexistent")):
+            json.dump({"tokens": {"access_token": "NEW-ACCESS", "refresh_token": "NEW-REFRESH"}}, open(os.path.join(home, "auth.json"), "w"))
+            print("Signed in."); sys.exit(0)
+        time.sleep(0.05)
+    print("Error: device code expired"); sys.exit(1)
+
 prov = "codex" if argv[:1] == ["exec"] else "claude" if "-p" in argv else "grok" if "--prompt-file" in argv else "agy"
 if prov in ("claude", "codex"):
     prompt = sys.stdin.read()

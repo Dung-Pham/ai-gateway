@@ -108,6 +108,7 @@ class AccountResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make()->label('Xem'),
                 Tables\Actions\EditAction::make()->label('Sửa'),
+                self::loginNowAction(),
                 self::loginAction(),
                 self::checkAction(),
                 self::pauseAction(),
@@ -120,11 +121,21 @@ class AccountResource extends Resource
             ->emptyStateDescription('Thêm tài khoản bằng script của người vận hành (xem hướng dẫn trong runbook), sau đó bấm "Kiểm tra ngay".');
     }
 
-    /** "Đăng nhập lại": hướng dẫn từng bước + lệnh sao chép được; xong thì kiểm tra và ghi nhận thời điểm đăng nhập. KHÔNG nhận mật khẩu/mã/token. */
+    /** "Đăng nhập": mở trang đăng nhập ngay trên giao diện (Claude, Codex, Grok). */
+    public static function loginNowAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('login_now')->label('Đăng nhập')->icon('heroicon-m-key')->color('primary')
+            ->authorize(fn () => Perm::can('accounts.manage'))
+            ->visible(fn (Account $r) => \App\Services\Gateway\LoginGuide::supportsWeb($r))
+            ->url(fn (Account $r) => self::getUrl('dang-nhap', ['record' => $r]));
+    }
+
+    /** "Đăng nhập lại" bằng terminal: hướng dẫn từng bước + lệnh sao chép được; xong thì kiểm tra và ghi nhận thời điểm đăng nhập. KHÔNG nhận mật khẩu/mã/token. */
     public static function loginAction(): Tables\Actions\Action
     {
-        return Tables\Actions\Action::make('login')->label('Đăng nhập lại')->icon('heroicon-m-key')->color('gray')
+        return Tables\Actions\Action::make('login')->label('Đăng nhập bằng terminal')->icon('heroicon-m-command-line')->color('gray')
             ->authorize(fn () => Perm::can('accounts.manage'))
+            ->visible(fn (Account $r) => ! \App\Services\Gateway\LoginGuide::supportsWeb($r))
             ->modalHeading(fn (Account $r) => "Đăng nhập lại {$r->label}")
             ->modalContent(fn (Account $r) => view('filament.modals.account-login', ['account' => $r, 'steps' => \App\Services\Gateway\LoginGuide::steps($r), 'command' => \App\Services\Gateway\LoginGuide::command($r)]))
             ->modalSubmitActionLabel('Tôi đã đăng nhập xong: kiểm tra')->modalCancelActionLabel('Đóng')
@@ -218,6 +229,7 @@ class AccountResource extends Resource
         return [
             'index' => Pages\ListAccounts::route('/'),
             'create' => Pages\CreateAccount::route('/them'),
+            'dang-nhap' => Pages\LoginAccount::route('/{record}/dang-nhap'),
             'view' => Pages\ViewAccount::route('/{record}'),
             'edit' => Pages\EditAccount::route('/{record}/sua'),
         ];

@@ -7,6 +7,37 @@ use App\Models\Account;
 /** Hướng dẫn đăng nhập từng hãng. Giao diện KHÔNG nhận mật khẩu, mã hay token: người sở hữu đăng nhập trong terminal trên máy AI. */
 class LoginGuide
 {
+    /** Hãng đăng nhập được ngay trên giao diện. Antigravity (agy) là giao diện dòng lệnh tương tác nên chưa hỗ trợ: dùng terminal. */
+    public const WEB_PROVIDERS = ['claude', 'codex', 'grok'];
+
+    /** Tên miền hợp lệ của đường dẫn đăng nhập từng hãng (chống đường dẫn lạ do CLI hoặc đường truyền bị can thiệp). */
+    public const HOSTS = [
+        'claude' => ['claude.com', 'claude.ai', 'platform.claude.com', 'anthropic.com'],
+        'codex' => ['auth.openai.com', 'openai.com', 'chatgpt.com'],
+        'grok' => ['accounts.x.ai', 'auth.x.ai', 'x.ai', 'grok.com'],
+    ];
+
+    public static function supportsWeb(Account $a): bool
+    {
+        return in_array($a->provider?->code, self::WEB_PROVIDERS, true);
+    }
+
+    public static function safeUrl(?string $url, string $provider): ?string
+    {
+        $p = parse_url((string) $url);
+        $host = strtolower((string) ($p['host'] ?? ''));
+        if (($p['scheme'] ?? '') !== 'https' || $host === '' || isset($p['user']) || isset($p['pass'])) {
+            return null;
+        }
+        foreach (self::HOSTS[$provider] ?? [] as $h) {
+            if ($host === $h || str_ends_with($host, '.'.$h)) {
+                return $url;
+            }
+        }
+
+        return null;
+    }
+
     public static function command(Account $a): string
     {
         $dir = (string) config('gateway.install_dir', '/opt/aigw/ai-gateway');

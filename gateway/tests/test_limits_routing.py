@@ -337,3 +337,54 @@ def test_runner_khong_tra_loi_thi_giu_gia_tri_cu_va_khong_loi(env):
     env.clock.e += 700
     s = env.client.get("/internal/state", headers=h)
     assert s.status_code == 200 and s.json()["accounts"]["claude-01"]["auth"]["login_expires_at"] == 1797000000.0
+
+
+# ---------------------------------------------------------------- đăng nhập từ giao diện (chuyển tiếp tới runner)
+def test_dang_nhap_can_token_quan_tri_va_tai_khoan_ton_tai(env):
+    from conftest import ADMIN
+    for m, u in (("post", "/internal/accounts/claude-01/login/start"), ("get", "/internal/accounts/claude-01/login/status?session_id=x"),
+                 ("post", "/internal/accounts/claude-01/login/code"), ("post", "/internal/accounts/claude-01/login/cancel")):
+        assert getattr(env.client, m)(u).status_code == 401
+    assert env.client.post("/internal/accounts/khong-co/login/start", headers={"X-Admin-Token": ADMIN}).status_code == 404
+
+
+def test_dang_nhap_chuyen_tiep_dung_duong_dan_va_khong_ghi_log_ma(env, caplog):
+    import logging
+    from conftest import ADMIN
+    caplog.set_level(logging.DEBUG)
+    h = {"X-Admin-Token": ADMIN}
+    env.runner.login_script = {"/v1/login/start": {"ok": True, "session_id": "lg_1", "state": "awaiting_code", "url": "https://claude.com/cai/oauth/authorize?x"},
+                               "/v1/login/code": {"ok": True, "session_id": "lg_1", "state": "verifying"}}
+    assert env.client.post("/internal/accounts/claude-01/login/start", headers=h).json()["url"].startswith("https://claude.com/")
+    secret = "MA-BI-MAT-KHONG-DUOC-GHI-LOG-123"
+    r = env.client.post("/internal/accounts/claude-01/login/code", headers=h, json={"session_id": "lg_1", "code": secret})
+    assert r.json()["state"] == "verifying" and secret not in r.text
+    assert (("claude-01", "POST", "/v1/login/code", {"session_id": "lg_1", "code": secret})) in env.runner.login_calls
+    assert secret not in caplog.text                                                   # gateway không ghi mã vào log
+    env.client.get("/internal/accounts/claude-01/login/status?session_id=lg_1", headers=h)
+    assert env.runner.login_calls[-1][:3] == ("claude-01", "GET", "/v1/login/status?session_id=lg_1")
+
+
+def test_dang_nhap_xong_go_co_het_phien_va_lay_lai_han(env):
+    from conftest import ADMIN
+    h = {"X-Admin-Token": ADMIN}
+    env.runner.script["claude-01"] = [env.runner.fail("auth_expired")]
+    env.post(); env.post()
+    assert env.client.get("/internal/state", headers=h).json()["accounts"]["claude-01"]["flag"] == "auth_expired"
+    env.runner.login_script = {"/v1/login/status": {"ok": True, "state": "done", "session_id": "lg_1"}}
+    assert env.client.get("/internal/accounts/claude-01/login/status?session_id=lg_1", headers=h).json()["state"] == "done"
+    assert env.client.get("/internal/state", headers=h).json()["accounts"]["claude-01"]["flag"] is None
+
+
+def test_dang_nhap_than_yeu_cau_qua_lon_hoac_hong_bi_tu_choi(env):
+    from conftest import ADMIN
+    h = {"X-Admin-Token": ADMIN}
+    assert env.client.post("/internal/accounts/claude-01/login/code", headers=h, content=b"x" * 5000).status_code == 413
+    assert env.client.post("/internal/accounts/claude-01/login/code", headers=h, content=b"khong phai json").status_code == 400
+
+
+def test_cong_chi_cho_goi_duong_dan_dang_nhap_cua_runner():
+    import asyncio
+    from gateway.runner_client import HttpRunnerClient, RunnerRef
+    r = asyncio.run(HttpRunnerClient(5).call(RunnerRef("a", "http://runner-a:8800", "s" * 40), "POST", "/v1/run", {}))
+    assert r["ok"] is False and r["error_class"] == "bad_request"

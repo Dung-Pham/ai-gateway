@@ -421,6 +421,58 @@ def create_app(settings: Settings, *, engine=None, runner_client=None, clock=Non
         state.inc(f"account_checks_failed_total{{class=\"{cls}\"}}")
         return {"ok": False, "error_class": cls, "latency_ms": lat, "message": str(res.get("message", ""))[:200]}
 
+    # ------------------------------------------------------------------ đăng nhập tài khoản từ giao diện (chuyển tiếp tới runner)
+    async def login_ref(label: str) -> RunnerRef:
+        acc = await threaded(store.account_by_label, label)
+        if not acc:
+            raise ApiError(404, "account_not_found", "Không có tài khoản này.")
+        secret = settings.runner_secrets.get(label)
+        if not secret:
+            raise ApiError(409, "no_runner_secret", "Chưa khai báo bí mật runner cho tài khoản này.")
+        return RunnerRef(label, validate_runner_url(acc["runner_url"], settings.runner_host_regex, settings.allow_runner_port_min), secret)
+
+    async def small_json(request: Request) -> dict:
+        raw = await request.body()
+        if len(raw) > 4096:
+            raise ApiError(413, "too_large", "Thân yêu cầu quá lớn.")
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            raise ApiError(400, "invalid_request", "JSON không hợp lệ.")
+        if not isinstance(d, dict):
+            raise ApiError(400, "invalid_request", "JSON không hợp lệ.")
+        return d
+
+    def login_done(label: str, res: dict) -> dict:
+        if res.get("ok") and res.get("state") == "done":     # vừa đăng nhập xong: gỡ cờ hết phiên/ngắt mạch, buộc lấy lại hạn đăng nhập
+            state.flags.pop(label, None); state.last_error.pop(label, None); state.auth_info.pop(label, None)
+            state.inc("account_logins_ok_total")
+        return res
+
+    @app.post("/internal/accounts/{label}/login/start")
+    async def login_start(label: str, request: Request):
+        admin_only(request)
+        return await runner.call(await login_ref(label), "POST", "/v1/login/start", {})
+
+    @app.get("/internal/accounts/{label}/login/status")
+    async def login_status(label: str, request: Request):
+        admin_only(request)
+        sid = request.query_params.get("session_id", "")[:64]
+        return login_done(label, await runner.call(await login_ref(label), "GET", "/v1/login/status?session_id=" + sid))
+
+    @app.post("/internal/accounts/{label}/login/code")
+    async def login_code(label: str, request: Request):
+        admin_only(request)
+        d = await small_json(request)
+        res = await runner.call(await login_ref(label), "POST", "/v1/login/code", {"session_id": str(d.get("session_id", ""))[:64], "code": str(d.get("code", ""))[:700]})
+        return login_done(label, res)
+
+    @app.post("/internal/accounts/{label}/login/cancel")
+    async def login_cancel(label: str, request: Request):
+        admin_only(request)
+        d = await small_json(request)
+        return await runner.call(await login_ref(label), "POST", "/v1/login/cancel", {"session_id": str(d.get("session_id", ""))[:64]})
+
     @app.get("/metrics")
     async def metrics(request: Request):
         admin_only(request)

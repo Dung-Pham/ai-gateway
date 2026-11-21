@@ -53,6 +53,12 @@ class FakeRunner:
         self.info_calls = getattr(self, "info_calls", 0) + 1
         return getattr(self, "auth_script", {}).get(ref.label, {"provider": "claude", "auth": {"login_expires_at": None}})
 
+    async def call(self, ref, method, path, body=None):
+        self.login_calls = getattr(self, "login_calls", [])
+        self.login_calls.append((ref.label, method, path, body))
+        s = getattr(self, "login_script", {}).get(path.split("?")[0])
+        return s(body) if callable(s) else (s or {"ok": True, "state": "awaiting_code"})
+
     async def run(self, ref, payload):
         self.calls.append((ref.label, ref.url, ref.secret, payload))
         q = self.script.get(ref.label)

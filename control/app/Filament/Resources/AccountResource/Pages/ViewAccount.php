@@ -22,7 +22,10 @@ class ViewAccount extends ViewRecord
     {
         return [
             Actions\EditAction::make()->label('Sửa')->icon('heroicon-m-pencil-square'),
-            Actions\Action::make('login')->label('Đăng nhập lại')->icon('heroicon-m-key')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
+            Actions\Action::make('login_now')->label('Đăng nhập')->icon('heroicon-m-key')->color('primary')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
+                ->visible(fn () => \App\Services\Gateway\LoginGuide::supportsWeb($this->record))
+                ->url(fn () => AccountResource::getUrl('dang-nhap', ['record' => $this->record])),
+            Actions\Action::make('login')->label('Đăng nhập bằng terminal')->icon('heroicon-m-command-line')->color('gray')->authorize(fn () => \App\Filament\Support\Perm::can('accounts.manage'))
                 ->modalHeading("Đăng nhập lại {$this->record->label}")
                 ->modalContent(fn () => view('filament.modals.account-login', ['account' => $this->record, 'steps' => \App\Services\Gateway\LoginGuide::steps($this->record), 'command' => \App\Services\Gateway\LoginGuide::command($this->record)]))
                 ->modalSubmitActionLabel('Tôi đã đăng nhập xong: kiểm tra')->modalCancelActionLabel('Đóng')

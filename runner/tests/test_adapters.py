@@ -265,11 +265,15 @@ def test_claude_chi_mot_luot_lam_moi_token_tai_mot_thoi_diem(make_service):
     svc.token.write_text(_json.dumps({"claudeAiOauth": {"accessToken": "OLD", "refreshToken": "R1", "expiresAt": int((_time.time() - 3600) * 1000)}}))
     out = {}
 
-    def go(k, user, delay):
-        _time.sleep(delay)
+    def go(k, user):
         out[k] = run(svc, user=user)[1]
-    a = threading.Thread(target=go, args=("a", "@@REFRESH @@PAUSE", 0)); b = threading.Thread(target=go, args=("b", "chao", 0.25))
-    a.start(); b.start(); a.join(); b.join()
+    a = threading.Thread(target=go, args=("a", "@@REFRESH @@PAUSE")); b = threading.Thread(target=go, args=("b", "chao"))
+    a.start()
+    t0 = _time.time()
+    while not svc.adapter._refresh_lock.locked() and _time.time() - t0 < 10:     # chỉ cho lượt b chạy SAU khi a đã giữ khóa (không phụ thuộc tốc độ máy)
+        _time.sleep(0.005)
+    assert svc.adapter._refresh_lock.locked()
+    b.start(); a.join(); b.join()
     assert out["a"]["ok"] and out["b"]["ok"]
     seen = [_json.loads(l) for l in open(str(svc.log) + ".seen").read().splitlines()]
     assert "OLD" in seen[0] and "NEW-TOKEN-AFTER-REFRESH" in seen[1]     # lượt hai chờ, rồi đọc token mới đã ghi ngược

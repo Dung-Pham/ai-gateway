@@ -66,6 +66,48 @@ class GatewayClient
         }
     }
 
+    /**
+     * Đăng nhập tài khoản từ giao diện. Thân yêu cầu có thể chứa MÃ XÁC NHẬN MỘT LẦN của người dùng: không ghi log, không lưu, không trả lại.
+     *
+     * @return array<string, mixed> luôn có 'ok'; lỗi mạng trả thông điệp chung (không kèm nội dung yêu cầu)
+     */
+    private function loginCall(string $method, string $label, string $action, array $body = [], array $query = []): array
+    {
+        try {
+            $http = $this->http(35);
+            if (! $http) {
+                return ['ok' => false, 'error_class' => 'no_admin_token', 'message' => 'Giao diện chưa có mã quản trị để gọi gateway.'];
+            }
+            $url = '/internal/accounts/'.rawurlencode($label).'/login/'.$action;
+            $r = $method === 'get' ? $http->get($url, $query) : $http->post($url, $body);
+            $j = $r->json();
+
+            return is_array($j) && array_key_exists('ok', $j) ? $j : ['ok' => false, 'error_class' => 'gateway_error', 'message' => 'Gateway trả lỗi ('.$r->status().').'];
+        } catch (\Throwable) {
+            return ['ok' => false, 'error_class' => 'unreachable', 'message' => 'Không kết nối được gateway.'];
+        }
+    }
+
+    public function loginStart(string $label): array
+    {
+        return $this->loginCall('post', $label, 'start');
+    }
+
+    public function loginStatus(string $label, string $sessionId): array
+    {
+        return $this->loginCall('get', $label, 'status', query: ['session_id' => $sessionId]);
+    }
+
+    public function loginCode(string $label, string $sessionId, string $code): array
+    {
+        return $this->loginCall('post', $label, 'code', ['session_id' => $sessionId, 'code' => $code]);
+    }
+
+    public function loginCancel(string $label, string $sessionId): array
+    {
+        return $this->loginCall('post', $label, 'cancel', ['session_id' => $sessionId]);
+    }
+
     public function reset(string $label): bool
     {
         try {

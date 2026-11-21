@@ -23,6 +23,8 @@ class RunnerService:
         self.tripped = False
         self.inflight = 0
         self.lock = threading.Lock()
+        from .login import LoginManager
+        self.login = LoginManager(cfg, self.adapter)
 
     def execute(self, req: dict):
         """Trả (http_status, body). CLI lỗi vẫn là HTTP 200 với ok=false; chỉ lỗi truyền tải mới dùng mã khác."""
@@ -108,6 +110,13 @@ def make_handler(service: RunnerService):
                 return self._send(200, {"ok": True, "provider": cfg.provider, "tripped": service.tripped, "inflight": service.inflight})
             if not self._authed():
                 return self._send(401, {"ok": False, "error_class": "bad_request", "message": "Không có quyền."})
+            if self.path.startswith("/v1/login/status"):
+                from urllib.parse import parse_qs, urlparse
+                sid = (parse_qs(urlparse(self.path).query).get("session_id") or [""])[0]
+                try:
+                    return self._send(200, service.login.status(sid))
+                except RunnerError as e:
+                    return self._send(200, {"ok": False, "error_class": e.error_class, "message": e.message})
             if self.path == "/v1/info":
                 info = service.adapter.info()
                 info["auth"] = service.adapter.auth_info()
@@ -119,6 +128,8 @@ def make_handler(service: RunnerService):
         def do_POST(self):
             if not self._authed():
                 return self._send(401, {"ok": False, "error_class": "bad_request", "message": "Không có quyền."})
+            if self.path.startswith("/v1/login/"):
+                return self._login_post()
             if self.path != "/v1/run":
                 return self._send(404, {"ok": False, "message": "Không có đường dẫn này."})
             try:
@@ -138,6 +149,26 @@ def make_handler(service: RunnerService):
                 return self._send(400, {"ok": False, "error_class": "bad_request", "message": "JSON không hợp lệ."})
             code, body = service.execute(req)
             self._send(code, body, {"Retry-After": "1"} if code == 503 else None)
+
+        def _login_post(self):
+            """Đăng nhập từ giao diện. Thân yêu cầu nhỏ; mã người dùng KHÔNG bao giờ được ghi log hay trả lại."""
+            try:
+                n = int(self.headers.get("Content-Length", "0"))
+                req = json.loads(self.rfile.read(n)) if 0 < n <= 4096 else {}
+                if not isinstance(req, dict):
+                    raise ValueError
+            except ValueError:
+                return self._send(400, {"ok": False, "error_class": "bad_request", "message": "JSON không hợp lệ."})
+            try:
+                if self.path == "/v1/login/start":
+                    return self._send(200, service.login.start())
+                if self.path == "/v1/login/code":
+                    return self._send(200, service.login.submit(str(req.get("session_id", "")), str(req.get("code", ""))))
+                if self.path == "/v1/login/cancel":
+                    return self._send(200, service.login.cancel(str(req.get("session_id", ""))))
+            except RunnerError as e:
+                return self._send(200, {"ok": False, "error_class": e.error_class, "message": e.message})
+            self._send(404, {"ok": False, "message": "Không có đường dẫn này."})
 
     return Handler
 

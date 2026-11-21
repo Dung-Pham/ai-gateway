@@ -10,3 +10,4 @@ chatgpt.com:443   # Codex (ChatGPT): API mô hình và xác thực (quan sát th
 api.openai.com:443   # Codex: CHỈ để nhận lỗi 401 nhanh khi hết phiên (không có thì CLI thử lại ~5 phút rồi mới báo timeout). Lượt gọi thật chỉ dùng chatgpt.com
 auth.openai.com:443   # Codex: làm mới token (suy ra từ chuỗi trong CLI 0.163.0, CHƯA quan sát chạy thật; access token hiện hạn khoảng 10 ngày)
 oauth2.googleapis.com:443   # Antigravity: làm mới token (suy ra từ chuỗi trong CLI 1.5.12, CHƯA quan sát chạy thật; access token Google thường hạn 1 giờ)
+auth.x.ai:443   # Grok: đăng nhập bằng mã thiết bị (đã quan sát thật 21/11: nối tới /oauth2/device/code; nhiều khả năng cũng dùng để làm mới token, chưa quan sát)

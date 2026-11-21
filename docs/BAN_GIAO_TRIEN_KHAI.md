@@ -53,7 +53,8 @@ Chuỗi: `đã viết mã → test giả lập đạt → tích hợp staging �
 | Chạy với CLI thật (Claude, Grok, agy) qua Docker | **Đã chạy trên máy dev** (đợt thăm dò và smoke test), kể cả tìm web mức nhẹ và một bài SEO hoàn chỉnh từ SEO Studio thử |
 | **Diễn tập đúng bộ triển khai này** (MariaDB 10.6, Caddy, build ảnh, migrate, gọi API, "Kiểm tra ngay", đồng bộ, sao lưu/khôi phục, kiểm tra mạng) | **Đã chạy trên máy dev ngày 19/11/2026** với runner dùng CLI **giả**; kết quả mục 9 |
 | Máy AI **tách biệt thật**, tường lửa hai chiều, chặn từ server chính | **CHƯA** (cần quản lý dựng). Mục 9 là danh sách kiểm tra phải chạy |
-| Chế độ TLS của Caddy (`WEB_MODE=tls`), luồng bật 2FA bằng mã | **CHƯA thử** |
+| Chế độ TLS của Caddy (`WEB_MODE=tls`) | **CHƯA thử** |
+| 2FA (TOTP, tương thích Google Authenticator, Microsoft Authenticator, Authy) | Test tự động đã kiểm tra: khóa Base32, mã 6 số, hàm xác minh nhận mã đúng và từ chối mã sai, có 8 mã khôi phục. **CHƯA thử** luồng quét mã QR và đăng nhập bằng mã trên trình duyệt thật |
 | Luật tường lửa mẫu `deploy/firewall/docker-user.sh.example` | **CHƯA thử** (cần root) |
 | Runner Grok/agy trong bộ triển khai mới | Đã sinh được đoạn Compose, **chưa chạy** (đã chạy bản cũ của bộ triển khai) |
 | Runner **Codex** (ChatGPT) | **Đã chạy CLI thật trong container runner cứng hóa** ngày 20/11/2026: gọi được, 6 đòn tấn công đều thất bại, hết phiên được nhận biết đúng. **Chưa** chạy trong bộ Compose đầy đủ cùng gateway, chưa thấy câu chữ lỗi hết hạn mức thật, chưa thấy CLI tự làm mới token. Chi tiết: `docs/KET_QUA_THAM_DO.md` Đợt 4 |
@@ -141,7 +142,7 @@ scripts/aigw up               # build ảnh, chạy migrate, khởi động toà
 scripts/aigw health           # phải "Đạt N, không đạt 0"
 scripts/aigw create-admin ten@congty.example   # hỏi mật khẩu tại chỗ (>= 12 ký tự)
 ```
-Vào `APP_URL`, đăng nhập, **bật 2FA** (Menu người dùng → Hồ sơ của tôi). Với `REQUIRE_2FA=true` hệ thống sẽ bắt buộc.
+Vào `APP_URL`, đăng nhập, **bật 2FA** (Menu người dùng → Hồ sơ của tôi): quét mã QR bằng ứng dụng Authenticator (Google Authenticator, Microsoft Authenticator, Authy...), **lưu 8 mã khôi phục ở nơi an toàn** (mất điện thoại mà không có mã khôi phục thì phải nhờ quản trị khác tắt 2FA hộ). Với `REQUIRE_2FA=true` hệ thống bắt buộc mọi người dùng bật. Giao diện này điều khiển cả việc đăng nhập các tài khoản AI nên **nên coi 2FA là bắt buộc**.
 
 ### 3.6 👤 Đăng nhập tài khoản AI (người sở hữu làm; web KHÔNG nhận mật khẩu/token)
 Phiên đăng nhập là một **tệp token** trong `/opt/aigw/secrets/<nhãn>/auth/`. Lệnh sau chạy CLI **trong một container sạch** (không keychain, không D-Bus, quyền tối thiểu) và chỉ chép tệp token vào đúng thư mục auth của runner:
@@ -219,7 +220,11 @@ Khi hết phiên giao diện hiện "Hết phiên" và cảnh báo; chạy lại
 - **Claude:** hạn thật đọc từ CLI (hạn tuyệt đối của mã làm mới). **Grok, Codex, Antigravity:** CLI chưa cho biết hạn, nên chỉ có **hạn ước tính** = lần đăng nhập được ghi nhận + số ngày đặt ở **Hệ thống → Cài đặt → Nhắc đăng nhập lại** (mặc định chỉ Grok = 7 ngày theo tài liệu CLI; hãng khác để trống = không nhắc nếu chưa đặt).
 - **Cảnh báo:** mỗi tài khoản có đúng một cảnh báo, mở khi còn **14, 7, 3, 1 ngày** (chỉnh được; còn từ 3 ngày trở xuống là nghiêm trọng), tự đóng khi đã đăng nhập lại. Hiện ở **Cảnh báo** và trên Tổng quan.
 - Nút **"Đăng nhập lại"** ở trang tài khoản mở hướng dẫn từng bước và **lệnh sao chép được** (`cd <thư mục cài> && scripts/aigw login <hãng> <nhãn>`). Làm xong bấm **"Tôi đã đăng nhập xong: kiểm tra"**: gateway kiểm tra, giao diện ghi nhận thời điểm đăng nhập và hạn mới.
-- **Giới hạn:** việc đăng nhập vẫn làm **trong terminal** trên máy AI, **không** làm ngay trong trình duyệt (giao diện không nhận mật khẩu, mã hay token). **Cảnh báo chỉ hiện trong giao diện**: chưa gửi email hay webhook. Đặt `AIGW_INSTALL_DIR` trong `.env` của giao diện nếu thư mục cài khác `/opt/aigw/ai-gateway`. Migration mới (`accounts.logged_in_at`, `login_expires_at`) chạy tự động ở `scripts/aigw up`.
+- **Đăng nhập ngay trên giao diện, không cần SSH (21/11/2026):** nút **"Đăng nhập"** (Claude, Codex, Grok) mở trang đăng nhập có trạng thái. Gateway bảo runner chạy CLI đăng nhập trong container cứng hóa; trang hiện **đường dẫn** (và **mã thiết bị** với Codex, Grok). Người dùng mở đường dẫn trên trình duyệt của mình và đăng nhập (mật khẩu, 2FA nhập **trên trang của hãng**, không qua Cổng AI). **Claude:** sao chép mã hiện ra rồi dán vào ô trên trang. **Codex, Grok:** nhập mã thiết bị trên trang hãng, trang tự chờ (3 giây một lần) rồi tự lưu. Xong, Cổng AI tự kiểm tra và ghi nhận hạn đăng nhập mới.
+  - **An ninh:** chỉ vai trò Quản trị và Vận hành; ô dán mã dạng ẩn; mã dùng một lần đi thẳng vào chương trình đăng nhập, **không lưu, không ghi log, không vào nhật ký kiểm toán**, xóa khỏi trang ngay khi gửi; tối đa 5 lần sai mỗi phiên, phiên hết hạn sau 15 phút, mỗi tài khoản một phiên tại một thời điểm; đường dẫn đăng nhập chỉ được hiện nếu thuộc tên miền của hãng; token chỉ ghi vào thư mục `auth` của runner (quyền 0600).
+  - **Đổi nguyên tắc thiết kế:** trước đây giao diện không bao giờ nhận gì ngoài mô tả; nay nó nhận **một mã xác nhận dùng một lần** (không phải mật khẩu, không phải token) và chuyển cho CLI. Cần hai tên miền cho runner: `auth.openai.com` (Codex) và `auth.x.ai` (Grok), đã có trong `deploy/egress-allowlist.txt`.
+  - **Antigravity (agy):** chưa hỗ trợ (CLI là giao diện dòng lệnh tương tác), vẫn dùng nút "Đăng nhập bằng terminal" hoặc `scripts/aigw login`.
+- **Giới hạn:** **Cảnh báo chỉ hiện trong giao diện**: chưa gửi email hay webhook. Đặt `AIGW_INSTALL_DIR` trong `.env` của giao diện nếu thư mục cài khác `/opt/aigw/ai-gateway`. Migration mới (`accounts.logged_in_at`, `login_expires_at`) chạy tự động ở `scripts/aigw up`.
 
 **Claude tự làm mới token** (access sống khoảng 8 giờ) nhưng **mã làm mới có hạn tuyệt đối** (lần thấy: đến 15/12/2026, không dài thêm sau mỗi lần làm mới), nên **phải đăng nhập lại định kỳ, khoảng vài tuần**. Đặt nhắc lịch cho người sở hữu tài khoản. Mỗi tài khoản chỉ nên đăng nhập ở **một nơi**: mã làm mới bị xoay, một bản sao token ở nơi khác sẽ mất hiệu lực.
 

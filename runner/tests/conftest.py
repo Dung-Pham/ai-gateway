@@ -27,7 +27,7 @@ def make_service(tmp_path, monkeypatch):
         log = tmp_path / "stub.log"
         monkeypatch.setenv("STUB_LOG", str(log))
         kw = dict(provider=provider, cli_bin=STUB, auth_dir=str(auth), secret=SECRET, work_root=str(tmp_path / "work"),
-                  allow_unpinned=True, timeout_s=5, max_concurrency=2, passthrough_env=("STUB_LOG",), grok_deny_file=str(deny),
+                  allow_unpinned=True, timeout_s=5, max_concurrency=2, passthrough_env=("STUB_LOG", "STUB_APPROVE", "STUB_LOGIN_URL", "STUB_DEVICE_WAIT"), grok_deny_file=str(deny),
                   max_prompt_bytes=2000, port=0, host="127.0.0.1")
         kw.update(over)
         svc = RunnerService(Config(**kw))

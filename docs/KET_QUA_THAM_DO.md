@@ -303,3 +303,14 @@ Tên miền cần ra ngoài (chưa ghi qua bộ ghi tên miền; **có cơ chế
 - **Mã làm mới bị XOAY** mỗi lần làm mới (hai giá trị khác nhau trước/sau). Hệ quả: một bản sao token cũ của cùng tài khoản **mất hiệu lực** sau khi nơi khác làm mới (đã gặp: bản sao trong stack bị báo "revoked"). Mỗi tài khoản chỉ nên nằm ở MỘT nơi.
 - **Ngày hết hạn của mã làm mới không đổi sau khi làm mới** (15/12/2026 cả trước và sau, **chỉ một mẫu**): có vẻ cố định từ lúc đăng nhập, nghĩa là **phải đăng nhập lại định kỳ** (khoảng vài tuần), tự làm mới không thay được. Chu kỳ chính xác chưa biết.
 - **Khóa làm mới:** vì mã bị xoay, runner Claude nay chỉ cho **một** lượt chạy tại một thời điểm khi token còn dưới 5 phút (các lượt khác chờ rồi đọc token mới đã ghi ngược). Có test với CLI giả; **chưa thử** cuộc đua thật (thử có thể làm hỏng mã làm mới của tài khoản đang dùng).
+
+---
+
+# Đợt 6: Đăng nhập từ giao diện, thử THẬT trong runner cứng hóa (21/11/2026)
+
+**Đã quan sát thật** (Claude 2.1.308, Codex 0.163.0, Grok 1.0.70; không dùng tài khoản thật, chỉ thư mục tạm):
+- Cả ba CLI in đường dẫn đăng nhập **qua ống, không cần TTY**. Claude: `https://claude.com/cai/oauth/authorize?...` rồi chờ "Paste code here if prompted >" ở stdin; **mã sai trả "Invalid code..." và CLI vẫn chờ** (thử lại được). Codex `login --device-auth`: đường dẫn `https://auth.openai.com/codex/device` + mã dạng `XXXX-XXXXX` (hạn 15 phút). Grok `login --device-code`: `https://accounts.x.ai/oauth2/device?user_code=XXXX-XXXX` + cùng mã, rồi tự thăm dò.
+- **Mạng khi đăng nhập:** Claude không nối gì lúc in đường dẫn; Codex cần `auth.openai.com:443`; Grok cần **`auth.x.ai:443`** (chưa có trong danh sách trước đó, đã thêm).
+- **Trong container runner cứng hóa** (hệ tệp chỉ đọc, bỏ mọi quyền, qua proxy): cả ba bắt đầu phiên và trả đường dẫn (kèm mã thiết bị cho Codex/Grok); Claude nhận mã giả và trả về "Mã không đúng" để thử lại; hủy phiên dọn sạch thư mục tạm.
+
+**CHƯA kiểm chứng (cần người dùng đăng nhập thật):** bước CLI đổi mã lấy token thành công và ghi token (Claude); Codex/Grok hoàn tất sau khi người dùng xác nhận trên trang hãng; tên miền CLI dùng ở bước đổi mã/thăm dò thật ngoài các tên đã thấy (Claude: nhiều khả năng `platform.claude.com`, đã cho phép). Antigravity: chưa hỗ trợ.

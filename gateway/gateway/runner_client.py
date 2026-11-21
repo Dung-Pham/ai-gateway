@@ -38,6 +38,20 @@ class HttpRunnerClient:
         except (httpx.HTTPError, ValueError):
             return None
 
+    async def call(self, ref: RunnerRef, method: str, path: str, body: dict | None = None) -> dict:
+        """Gọi đường dẫn đăng nhập của runner (/v1/login/...). Thân yêu cầu có thể chứa mã người dùng: KHÔNG ghi log, KHÔNG trả lại."""
+        if not path.startswith("/v1/login/"):
+            return {"ok": False, "error_class": "bad_request", "message": "Đường dẫn không được phép."}
+        try:
+            async with httpx.AsyncClient(timeout=min(self.timeout_s, 30), trust_env=False) as c:
+                r = await c.request(method, ref.url + path, json=body, headers={"Authorization": "Bearer " + ref.secret})
+            out = r.json()
+            return out if isinstance(out, dict) else {"ok": False, "error_class": "upstream_error", "message": "Runner trả dữ liệu không đọc được."}
+        except httpx.TimeoutException:
+            return {"ok": False, "error_class": "timeout", "message": "Runner quá thời gian chờ."}
+        except (httpx.HTTPError, ValueError):
+            return {"ok": False, "error_class": "upstream_error", "message": "Không kết nối được runner."}
+
     async def run(self, ref: RunnerRef, payload: dict) -> tuple[int, dict]:
         try:
             async with httpx.AsyncClient(timeout=self.timeout_s, trust_env=False) as c:   # trust_env=False: không đi qua proxy
