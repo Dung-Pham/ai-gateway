@@ -137,6 +137,16 @@ class GatewaySyncTest extends TestCase
         $this->assertSame(0, Alert::open()->where('type', 'gateway_unreachable')->count());
     }
 
+    public function test_han_dang_nhap_qua_xa_bi_chan_o_2037_de_khong_vo_cot_timestamp(): void
+    {
+        $a = $this->account();
+        $cols = app(AccountSync::class)->loginColumns($a, ['login_expires_at' => 4102444800], now());   // 2100-01-01
+        $this->assertSame('cli', $cols['login_expires_source']);
+        $this->assertLessThan(2038, $cols['login_expires_at']->year);
+        $a->update($cols);                                   // không được ném lỗi cột
+        $this->assertNotNull($a->fresh()->login_expires_at);
+    }
+
     public function test_lenh_gateway_sync_bo_qua_o_che_do_mau(): void
     {
         config(['gateway.demo' => true]);

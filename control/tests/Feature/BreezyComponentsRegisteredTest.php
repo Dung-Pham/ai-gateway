@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use Jeffgreco13\FilamentBreezy\Livewire\PersonalInfo;
 use Jeffgreco13\FilamentBreezy\Livewire\TwoFactorAuthentication;
-use Jeffgreco13\FilamentBreezy\Livewire\UpdatePassword;
+use App\Livewire\SafeUpdatePassword;
 use Jeffgreco13\FilamentBreezy\Pages\TwoFactorPage;
 use Livewire\Mechanisms\ComponentRegistry;
 use Tests\TestCase;
@@ -20,7 +20,7 @@ class BreezyComponentsRegisteredTest extends TestCase
         $registry = app(ComponentRegistry::class);
         $this->assertSame(TwoFactorAuthentication::class, $registry->getClass('two_factor_authentication'));
         $this->assertSame(PersonalInfo::class, $registry->getClass('personal_info'));
-        $this->assertSame(UpdatePassword::class, $registry->getClass('update_password'));
+        $this->assertSame(SafeUpdatePassword::class, $registry->getClass('update_password'));
         $this->assertSame(TwoFactorPage::class, $registry->getClass('two-factor-page'));
     }
 }

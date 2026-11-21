@@ -2,10 +2,10 @@
 
 namespace App\Providers;
 
+use App\Livewire\SafeUpdatePassword;
 use Illuminate\Support\ServiceProvider;
 use Jeffgreco13\FilamentBreezy\Livewire\PersonalInfo;
 use Jeffgreco13\FilamentBreezy\Livewire\TwoFactorAuthentication;
-use Jeffgreco13\FilamentBreezy\Livewire\UpdatePassword;
 use Jeffgreco13\FilamentBreezy\Pages\TwoFactorPage;
 use Livewire\Livewire;
 
@@ -29,7 +29,7 @@ class AppServiceProvider extends ServiceProvider
         // tìm thành phần theo tên TRƯỚC bước đó, không thấy thì trả 419. Đăng ký sớm ở đây để luôn tìm thấy.
         Livewire::component('two_factor_authentication', TwoFactorAuthentication::class);
         Livewire::component('personal_info', PersonalInfo::class);
-        Livewire::component('update_password', UpdatePassword::class);
+        Livewire::component('update_password', SafeUpdatePassword::class);   // bản không đổi mã phiên, xem class
         Livewire::component('two-factor-page', TwoFactorPage::class);
     }
 }

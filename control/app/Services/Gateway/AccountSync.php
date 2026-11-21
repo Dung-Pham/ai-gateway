@@ -81,7 +81,9 @@ class AccountSync
     {
         $exp = $auth['login_expires_at'] ?? null;
         if (is_numeric($exp) && $exp > 0) {
-            return ['login_expires_at' => \Carbon\Carbon::createFromTimestamp((int) $exp), 'login_expires_source' => 'cli'];
+            // Cột timestamp của MariaDB chỉ tới 2038-01-19: giá trị xa hơn làm cả lượt đồng bộ lỗi, nên chặn ở mức an toàn.
+            $exp = min((int) $exp, 2145830400);   // 2037-12-31
+            return ['login_expires_at' => \Carbon\Carbon::createFromTimestamp($exp), 'login_expires_source' => 'cli'];
         }
         $life = LoginPolicy::lifetimeDays($a->provider?->code ?? '');
         if ($life !== null && $a->logged_in_at !== null) {

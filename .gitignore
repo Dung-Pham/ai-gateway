@@ -15,6 +15,7 @@ __pycache__/
 .venv/
 node_modules/
 vendor/
+!control/lang/vendor/
 storage/logs/
 
 # Bí mật và cấu hình triển khai: KHÔNG BAO GIỜ commit

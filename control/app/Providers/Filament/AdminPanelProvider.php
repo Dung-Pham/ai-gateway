@@ -82,7 +82,11 @@ class AdminPanelProvider extends PanelProvider
                 ->myProfile(shouldRegisterUserMenu: true, shouldRegisterNavigation: false, hasAvatars: false)
                 // Cùng chính sách mật khẩu với màn Người dùng: tối thiểu 12 ký tự.
                 ->passwordUpdateRules(rules: [\Illuminate\Validation\Rules\Password::min(12)], requiresCurrentPassword: true)
-                ->enableTwoFactorAuthentication(force: (bool) config('gateway.require_2fa')))
+                ->enableTwoFactorAuthentication(force: (bool) config('gateway.require_2fa'))
+                // Thay màn đổi mật khẩu gốc bằng bản không đổi mã phiên (bản gốc gây 419 cho các yêu cầu song song).
+                ->myProfileComponents(['update_password' => \App\Livewire\SafeUpdatePassword::class]))
+            // Breezy đăng ký lại 'update_password' bằng bản gốc lúc panel khởi động; đăng ký đè sau khi các plugin đã chạy.
+            ->bootUsing(fn () => \Livewire\Livewire::component('update_password', \App\Livewire\SafeUpdatePassword::class))
             ->globalSearchKeyBindings(['ctrl+k', 'command+k'])
             ->unsavedChangesAlerts()
             ->navigationGroups([
