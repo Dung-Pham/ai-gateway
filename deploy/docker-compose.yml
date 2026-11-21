@@ -35,6 +35,7 @@ x-control-env: &control-env
   LOG_CHANNEL: stderr
   GATEWAY_DEMO: "false"
   GATEWAY_URL: http://gateway:8000
+  AIGW_INSTALL_DIR: ${AIGW_INSTALL_DIR:-/opt/aigw/ai-gateway}   # chỉ để hiện đúng lệnh `scripts/aigw login ...` trong hướng dẫn
   ADMIN_ALLOWED_CIDRS: ${ADMIN_ALLOWED_CIDRS:-}
   REQUIRE_2FA: ${REQUIRE_2FA:-true}
   TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
